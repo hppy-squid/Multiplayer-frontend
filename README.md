@@ -1,3 +1,43 @@
+## Installationer
+
+Projektet använder **React**, **TypeScript**, **TailwindCSS** och **Material UI Icons**.
+
+### Styling
+```
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+### UI-komponenter och ikoner
+
+```
+npm install @mui/icons-material @mui/material @emotion/styled @emotion/react
+```
+
+### Routing
+
+```
+npm install react-router-dom
+npm install -D @types/react-router-dom
+```
+
+
+## Utveckling
+
+### Starta utvecklingsservern (Vite)
+```
+npm run dev
+```
+
+### Bygg för produktion
+```
+npm run build
+```
+
+
+
+
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

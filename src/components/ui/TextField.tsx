@@ -3,11 +3,7 @@ import type { InputHTMLAttributes } from "react";
 type Props = {
   id: string;
   label: string;
-  type?: string;
-  placeholder?: string;
-  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
-  maxLength?: number;
-};
+} & Omit<InputHTMLAttributes<HTMLInputElement>, "id">;
 
 /**
  * TextField - textinput med label.
@@ -20,6 +16,9 @@ export function TextField({
   placeholder,
   inputMode,
   maxLength,
+  value,
+  onChange,
+  ...rest
 }: Props) {
   return (
     <div className="mb-4">
@@ -35,6 +34,9 @@ export function TextField({
         placeholder={placeholder}
         inputMode={inputMode}
         maxLength={maxLength}
+        value={value}
+        onChange={onChange}
+        {...rest}
         className="w-full px-4 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-gray-50"
       />
     </div>
