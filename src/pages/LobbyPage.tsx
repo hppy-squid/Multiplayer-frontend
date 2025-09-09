@@ -4,7 +4,7 @@ import { TabButton } from "../components/ui/TabButton";
 import { TextField } from "../components/ui/TextField";
 import { Button } from "../components/ui/Button";
 import { Divider } from "../components/ui/Divider";
-import { GroupIcon } from "../components/GroupIcon";
+import { GroupIcon } from "../components/icons";
 
 /**
  * LobbyPage - startsidan för quiz-lobbyn.
@@ -18,7 +18,7 @@ export function LobbyPage() {
       <Card>
         {/* Ikon högst upp */}
         <div className="flex justify-center mb-4">
-          <GroupIcon className="w-12 h-12 text-gray-800" />
+          <GroupIcon sx={{ fontSize: 56 }} className="text-gray-800" />
         </div>
 
         {/* Titel */}
