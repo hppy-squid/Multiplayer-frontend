@@ -1,7 +1,8 @@
 
-export function LobbyMembers() {
+export function LobbyMembers({className = ""}) {
       return (
-    <div className="flex flex-col gap-6 p-6 bg-gray-50 rounded-lg shadow-md w-80">
+    <div className={`flex flex-col gap-6 p-6 bg-gray-50 rounded-lg shadow-md ${className}`}>
+      
       {/* Header */}
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-gray-800">LOBBYNAME</h1>
