@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "../components/ui/Card";
 import { TabList } from "../components/ui/TabList";
@@ -7,20 +7,46 @@ import { TextField } from "../components/ui/TextField";
 import { Button } from "../components/ui/Button";
 import { Divider } from "../components/ui/Divider";
 import { GroupIcon } from "../components/icons";
-import { createLobby, isBackendConfigured, BACKEND_NOT_ENABLED_MSG } from "../api/lobby";
+import {createLobby,joinLobby,isBackendConfigured,BACKEND_NOT_ENABLED_MSG,} from "../api/lobby";
 
 /**
  * LobbyPage – välj Join eller Create.
- * Create: anropar createLobby() och navigerar till /lobby/:code.
- * Knappen är avstängd tills backend är konfigurerad (VITE_API_BASE).
  */
 export function LobbyPage() {
   const navigate = useNavigate();
+  // Vilken tab är aktiv just nu? join/create
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
+  // Namn på spelaren (delas av join & create)
   const [name, setName] = useState("");
+  // Används för att visa "loading"-läge medan request körs
   const [submitting, setSubmitting] = useState(false);
 
-  // Skapa lobby → navigera på success
+  // --- JOIN state ---
+  // Lobbykod som spelaren skriver in
+  const [code, setCode] = useState("");
+
+  // Normaliserad version av koden (tar bort mellanslag etc.)
+  const normalizedCode = useMemo(
+    () => code.replace(/\s+/g, "").trim(),
+    [code]
+  );
+
+  // Testkod för dev-läge
+  const TEST_CODE =
+    (import.meta.env.VITE_TEST_LOBBY_CODE as string) || "123456";
+  // Är vi i utvecklingsläge och backend inte är satt?
+  const TEST_MODE = import.meta.env.DEV && !isBackendConfigured;
+
+  /**
+   * När knappen för att joina ska vara aktiv:
+   * - i TEST_MODE: endast om användaren skrivit exakt 123456
+   * - annars: så länge fältet inte är tomt (backend får validera)
+   */
+  const canJoin =
+    !submitting && (TEST_MODE ? normalizedCode === TEST_CODE : normalizedCode.length > 0);
+
+  
+  //Skapa lobby → anropa API och navigera till rätt sida
   const handleCreate = async () => {
     if (!isBackendConfigured || !name.trim() || submitting) return;
     setSubmitting(true);
@@ -29,20 +55,46 @@ export function LobbyPage() {
       navigate(`/lobby/${lobbyCode}`);
     } catch (err) {
       console.error(err);
-      // tydlig hint tills backend är på
-      alert( BACKEND_NOT_ENABLED_MSG );
-  
+      alert(BACKEND_NOT_ENABLED_MSG);  // tydlig hint tills backend är på
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Join lobby → antingen testflöde eller via backend
+  const handleJoin = async () => {
+    if (!canJoin) return;
+    setSubmitting(true);
+    try {
+      // Utvecklingsläge: hoppa över backend och "joina" direkt med testkoden
+      if (TEST_MODE && normalizedCode === TEST_CODE) {
+        // Fejka lyckad join i utveckling
+        await new Promise((r) => setTimeout(r, 120));
+        navigate(`/lobby/${TEST_CODE}`);
+        return;
+      }
+
+      // Prod/backend-läge: anropa API
+      const { lobbyCode } = await joinLobby({
+        lobbyCode: normalizedCode,
+        playerName: name.trim(),
+      });
+      navigate(`/lobby/${lobbyCode}`);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : BACKEND_NOT_ENABLED_MSG;
+      console.error(err);
+      alert(message);
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    // Wrapper: fyller hela höjden och centrerar kortet
     <div className="min-h-screen flex items-center justify-center p-6">
-      {/* Kortet som håller allt innehåll */}
+      {/* Kortet som innehåller allt */}
       <Card>
-        {/* Ikon högst upp */}
+        {/* Ikon överst */}
         <div className="flex justify-center mb-4">
           <GroupIcon sx={{ fontSize: 56 }} className="text-gray-800" />
         </div>
@@ -52,7 +104,7 @@ export function LobbyPage() {
           QUIZ GAME
         </h1>
 
-        {/* Växla mellan Join och Create */}
+        {/* Tabs för att växla mellan Join och Create */}
         <TabList>
           <TabButton
             active={activeTab === "join"}
@@ -68,8 +120,8 @@ export function LobbyPage() {
           </TabButton>
         </TabList>
 
-        {/* Gemensamt namn-fält */}
         <div>
+          {/* Namnfält som delas av båda lägena */}
           <TextField
             id="name"
             label="Your Name"
@@ -81,34 +133,45 @@ export function LobbyPage() {
 
           {activeTab === "join" ? (
             <>
-              {/* TODO: koppla på join-flödet när backend finns */}
+              {/* Fält för lobbykod */}
               <TextField
                 id="code"
                 label="Lobby Code"
-                placeholder="ENTER 6-DIGIT CODE"
+                placeholder={TEST_MODE ? `ENTER ${TEST_CODE}` : "ENTER 6-DIGIT CODE"}
                 inputMode="numeric"
                 maxLength={6}
+                value={code}                         // <-- KOPPLAD TILL STATE
+                onChange={(e) => setCode(e.target.value)}
               />
 
-              {/* Join-knapp (inaktiv just nu) */}
-              <Button type="button" disabled>
-                <span>#</span> Join Lobby
+              {/* Hint i dev-läge när fel kod är inskriven */}
+              {TEST_MODE && normalizedCode.length > 0 && normalizedCode !== TEST_CODE && (
+                <p className="text-xs text-amber-600 mb-2">
+                  Under utveckling funkar endast koden <code>{TEST_CODE}</code>.
+                </p>
+              )}
+
+              {/* Join-knappen, styrs av canJoin */}
+              <Button
+                type="button"
+                onClick={handleJoin}                 
+                disabled={!canJoin}                  
+              >
+                {submitting ? "Joining..." : (<><span>#</span> Join Lobby</>)}
               </Button>
 
-              {/* Dekorativ linje under knappen */}
               <Divider />
             </>
           ) : (
             <>
-              {/* Visa hint när backend inte är konfigurerad */}
+              {/* Visa hint när backend inte är påslagen */}
               {!isBackendConfigured && (
                 <p className="text-xs text-gray-500 mb-2">
-                  Backend inte konfigurerat. Sätt <code>VITE_API_BASE</code> i
-                  din <code>.env</code>.
+                  Backend inte konfigurerad. Sätt <code>VITE_API_BASE</code> i din <code>.env</code>.
                 </p>
               )}
 
-              {/* Skapa lobby – disabled utan backend, vid submit eller tomt namn */}
+              {/* Create-knapp – disabled utan backend, vid submit eller tomt namn */}
               <Button
                 type="button"
                 onClick={handleCreate}
