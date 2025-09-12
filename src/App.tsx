@@ -2,6 +2,7 @@ import './App.css'
 import { Routes, Route, Navigate } from "react-router-dom";
 import { LobbyPage } from './pages/LobbyPage'
 // import { WaitingRoomPage } from "./pages/WaitingRoomPage";
+import { QuizPage } from "./pages/QuizPage";
 
 function App() {
   return(
@@ -14,6 +15,9 @@ function App() {
       
       {/* /lobby/:lobbyCode → väntsal för en specifik lobby */}
       {/* <Route path="/lobby/:lobbyCode" element={<WaitingRoomPage />} /> */}
+
+      {/* sidan där quizet sker */}
+      <Route path="/quiz" element={<QuizPage />} />
     </Routes>
   )
 }
