@@ -19,6 +19,7 @@ export type PlayerDTO = {
 };
 
 export type LobbyDTO = {
+  id: number | null;
   lobbyCode: string;
   // Dessa två finns inte alltid i backend—gör dem gärna optional:
   maxPlayer?: number;

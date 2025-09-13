@@ -17,6 +17,7 @@ import {
   joinLobby,
   isBackendConfigured,
   FIXED_MAX_PLAYERS,
+  leaveLobby
 } from "../api/lobby";
 import { ensurePlayer } from "../api/ensurePlayer";
 import type {
@@ -224,7 +225,45 @@ export default function LobbyPage() {
   };
 
   // Gå tillbaka till startsidan
-  const handleLeave = () => navigate("/", { replace: true });
+  const handleLeave = async () => {
+    // Om vi inte är i väntrummet eller backend saknas – bara gå hem
+    if (!isWaiting || !isBackendConfigured) {
+      // stäng ev. WS snyggt
+      if (stompRef.current) {
+        try { await stompRef.current.deactivate(); } catch {// ignore 
+          }
+        stompRef.current = null;
+      }
+      navigate("/", { replace: true });
+      return;
+    }
+
+    try {
+      // 1) Anropa backend (triggar broadcast till alla i lobbyn)
+      const dto = await leaveLobby({ lobbyCode, playerId: myIdNum });
+
+      // 2) Om lobbyn blev tom (servern kan returnera id=null) → gå hem
+      if (dto.id == null || dto.players.length === 0) {
+        if (stompRef.current) {
+          try { await stompRef.current.deactivate(); } catch {// ignore
+            }
+          stompRef.current = null;
+        }
+        navigate("/", { replace: true });
+        return;
+      }
+
+      // 3) Om lobbyn fortfarande finns: vi lämnar ändå sidan (du lämnar ju lobbyn)
+      if (stompRef.current) {
+        try { await stompRef.current.deactivate(); } catch {//ignore 
+          }
+        stompRef.current = null;
+      }
+      navigate("/", { replace: true });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Kunde inte lämna lobbyn");
+    }
+  };
 
   // Starta spelet (just nu bara navigering — lägg WS publish här om backend stödjer)
   const handleStart = () => {

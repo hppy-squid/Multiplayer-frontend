@@ -94,3 +94,24 @@ export async function getLobbyById(
   return (await parseJsonOrThrow(res, "GET /lobby/find")) as ServerLobbyDTO;
 }
 
+/** Lämna lobby
+ * Backend: POST /api/lobby/leave/{lobbyCode}/{playerId}
+ * Returnerar den uppdaterade lobbyn (ServerLobbyDTO) eller id=null om lobbyn blev tom.
+ */
+export async function leaveLobby(params: { lobbyCode: string; playerId: number }) {
+  const res = await fetch(`${BASE}/lobby/leave/${params.lobbyCode}/${params.playerId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || "Leave failed");
+  }
+  return (await res.json()) as {
+    id: number | null;
+    lobbyCode: string;
+    players: Array<{ id: number; playerName: string; isHost: boolean; ready?: boolean; score?: number }>;
+    gameState: string;
+  };
+}
+
