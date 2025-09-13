@@ -1,32 +1,32 @@
 import { useState, type FormEvent } from "react";
 import {
-  createLobby,              // API-anrop (utkommenterat i implementation tills backend finns)
-  isBackendConfigured,      // true om VITE_API_BASE finns
-  BACKEND_NOT_ENABLED_MSG,  // feltext när backend saknas
-  FIXED_MAX_PLAYERS,        // alltid 4 spelare
+  createLobby,              
+  isBackendConfigured,      
+  BACKEND_NOT_ENABLED_MSG,  
+  FIXED_MAX_PLAYERS,        
 } from "../../api/lobby";
 
 type Props = { name: string; onCreated: (code: string) => void };
 
 /**
  * CreateLobbyForm
- * Skapar en ny lobby åt hosten.
- *  - Låst till 4 spelare (FIXED_MAX_PLAYERS).
- *  - UI är avstängt tills backend är konfigurerad (isBackendConfigured).
+ * Enkel form som skapar en lobby åt hosten.
+ * - Avbryter om backend saknas eller namnet är tomt.
+ * - Returnerar lobbykoden via onCreated för navigation i föräldern.
  */
-
 export function CreateLobbyForm({ name, onCreated }: Props) {
 
   // hindrar dubbelklick/duplicerade requests
-  const [submitting, setSubmitting] = useState(false);             
+  const [submitting, setSubmitting] = useState(false);
 
+  // Submit-handler för att skapa lobby
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
 
     // Kör inte om namnet är tomt, backend ej satt, eller vi redan skickar
     if (!name.trim() || !isBackendConfigured || submitting) return;
 
-    
+
     setSubmitting(true);
     try {
       /// Skicka hostens namn + fast maxantal (4)
@@ -35,10 +35,10 @@ export function CreateLobbyForm({ name, onCreated }: Props) {
         maxPlayer: FIXED_MAX_PLAYERS,
       });
 
-      // Förälder avgör navigation (t.ex. navigate(`/lobby/${lobbyCode}`))
+      // Låt föräldern bestämma navigation (t.ex. /lobby/:code)
       onCreated(lobbyCode);
     } catch (err) {
-      // Tills backend kopplas in kastar createLobby ett tydligt fel
+      // När backend saknas kastar createLobby ett tydligt fel
       console.error(err);
       alert(BACKEND_NOT_ENABLED_MSG);
     } finally {
@@ -49,8 +49,8 @@ export function CreateLobbyForm({ name, onCreated }: Props) {
 
   return (
     <form className="mt-4" onSubmit={handleCreate}>
-      
-       {/* Hint om att backend måste konfigureras */}
+
+      {/* Hint om att backend måste konfigureras */}
       {!isBackendConfigured && (
         <p className="text-xs text-gray-500 mb-2">
           Backend är inte konfigurerat. Sätt <code>VITE_API_BASE</code> i din{" "}
@@ -62,11 +62,10 @@ export function CreateLobbyForm({ name, onCreated }: Props) {
       <button
         type="submit"
         disabled={!isBackendConfigured || submitting || !name.trim()}
-        className={`w-full rounded-lg px-4 py-2 text-white ${
-          !isBackendConfigured || submitting || !name.trim()
-            ? "bg-gray-300 cursor-not-allowed"
-            : "bg-indigo-600 hover:bg-indigo-700"
-        }`}
+        className={`mt-4 w-full rounded-lg px-4 py-2 text-white ${!isBackendConfigured || submitting || !name.trim()
+          ? "bg-gray-300 cursor-not-allowed"
+          : "bg-indigo-600 hover:bg-indigo-700"
+          }`}
       >
         {submitting ? "Creating..." : "Create Lobby"}
       </button>
