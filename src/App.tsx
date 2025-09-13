@@ -1,7 +1,7 @@
 import './App.css'
 import { Routes, Route, Navigate } from "react-router-dom";
 
-import { LobbyPage } from './pages/LobbyPage'
+import  LobbyPage from './pages/LobbyPage'
 // import { WaitingRoomPage } from "./pages/WaitingRoomPage";
 import { QuizPage } from "./pages/QuizPage";
 

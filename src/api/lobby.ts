@@ -1,5 +1,5 @@
-import type { LobbyDTO } from "../types";
-import { API_BASE, USE_BACKEND, IS_DEV, TEST_CODE } from "./config";
+import { API_BASE, USE_BACKEND } from "./config";
+import type { ServerLobbyDTO } from "../types/types";
 
 // Bas-URL från env
 const BASE = API_BASE;
@@ -18,143 +18,100 @@ export const BACKEND_NOT_ENABLED_MSG =
 // ------- Create / Join -------
 
 export type CreateLobbyRequest = {
-  hostName: string;
-  maxPlayer?: number;
-};
-
-export type CreateLobbyResponse = {
-  lobbyCode: string;
+  /** Backend kräver playerId i path */
+  playerId: number | string;
 };
 
 export type JoinLobbyRequest = {
+  /** Kod som användaren anger */
   lobbyCode: string;
-  playerName: string;
+  /** Backend kräver playerId i path */
+  playerId: number | string;
 };
 
-export type JoinLobbyResponse = {
-  lobbyCode: string;   // bekräftar vilken lobby vi hamnade i
-};
-
-/** Skapar en ny lobby på backend. Kräver backend, returnerar { lobbyCode }. */
-export async function createLobby(
-  payload: CreateLobbyRequest
-): Promise<CreateLobbyResponse> {
-  // Säkerhetscheck: kör inte utan backend
+// === Helpers ===
+async function ensureBackend() {
   if (!isBackendConfigured) throw new Error(BACKEND_NOT_ENABLED_MSG);
-
-  // Skapa lobby via backend
-  const res = await fetch(`${BASE}/lobbies`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  // Felhantering
-  if (!res.ok) throw new Error("Failed to create lobby");
-  return res.json();
 }
 
+/** Läser svarstexten för bättre felmeddelanden vid 4xx/5xx. */
+async function parseJsonOrThrow(res: Response, context: string) {
+  const text = await res.text();
+  if (!res.ok) {
+    // Skicka med body i felet för enkel felsökning i UI
+    throw new Error(`${context} ${res.status}: ${text || "(no body)"}`);
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error(`${context} ${res.status}: Invalid JSON body`);
+  }
+}
+
+// === API-funktioner ===
 
 /**
- * Går med i en lobby via kod.
- * - I dev-läge utan backend: tillåter test code (123456).
- * - Annars: kräver backend. Returnerar { lobbyCode }.
+ * Skapar en ny lobby.
+ * Backend: POST /api/lobby/create/{playerId}
+ * Returnerar hela lobbyn från servern (ServerLobbyDTO).
+ */
+export async function createLobby(
+  { playerId }: CreateLobbyRequest
+): Promise<ServerLobbyDTO> {
+  await ensureBackend();
+
+  const url = `${BASE}/lobby/create/${encodeURIComponent(String(playerId))}`;
+  const res = await fetch(url, { method: "POST" });
+  return (await parseJsonOrThrow(res, "POST /lobby/create")) as ServerLobbyDTO;
+}
+
+/**
+ * Går med i befintlig lobby.
+ * Backend: POST /api/lobby/join/{lobbyCode}/{playerId}
+ * Returnerar hela lobbyn (ServerLobbyDTO).
  */
 export async function joinLobby(
-  payload: JoinLobbyRequest
-): Promise<JoinLobbyResponse> {
-  // Testkod funkar endast i dev och när backend inte används
-  if (IS_DEV && !USE_BACKEND) {
-    const input = (payload.lobbyCode ?? "").trim();
-    if (input === TEST_CODE) {
-      return { lobbyCode: TEST_CODE };
-    }
-  }
-  // Annars krävs backend
-  if (!USE_BACKEND) throw new Error(BACKEND_NOT_ENABLED_MSG);
+  { lobbyCode, playerId }: JoinLobbyRequest
+): Promise<ServerLobbyDTO> {
+  await ensureBackend();
 
-  // Join via backend
-  const res = await fetch(
-    `${BASE}/lobbies/${encodeURIComponent(payload.lobbyCode)}/join`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerName: payload.playerName }),
-    }
-  );
-  if (!res.ok) throw new Error("Failed to join lobby");
-  return res.json();
-}
-
-// ------- Waiting room helpers -------
-
-/** Hämtar en lobby (spelare, status, mm.). Kräver backend. */
-export async function getLobby(lobbyCode: string): Promise<LobbyDTO> {
-  // Kräver backend (GET på en lobby)
-  if (!isBackendConfigured) throw new Error(BACKEND_NOT_ENABLED_MSG);
-
-  const res = await fetch(`${BASE}/lobbies/${encodeURIComponent(lobbyCode)}`);
-  if (!res.ok) throw new Error("Failed to get lobby");
-  return res.json();
+  const url = `${BASE}/lobby/join/${encodeURIComponent(lobbyCode)}/${encodeURIComponent(String(playerId))}`;
+  const res = await fetch(url, { method: "POST" });
+  return (await parseJsonOrThrow(res, "POST /lobby/join")) as ServerLobbyDTO;
 }
 
 /**
- * Togglar min “ready”-status i en lobby. Kräver backend.
- * Skicka med playerId eller playerName (eller båda) beroende på vad backend kräver.
- * Returnerar uppdaterad LobbyDTO.
+ * Hämta lobby via ID
+ * Backend: GET /api/lobby/find/{lobbyId}
  */
-export async function toggleReady(
-  lobbyCode: string,
-  playerId?: string,
-  playerName?: string
-): Promise<LobbyDTO> {
-  // Kräver backend (POST: toggle ready)
-  if (!isBackendConfigured) throw new Error(BACKEND_NOT_ENABLED_MSG);
+export async function getLobbyById(
+  lobbyId: number | string
+): Promise<ServerLobbyDTO> {
+  await ensureBackend();
 
-  // Skicka med id/namn om du har dem (backend kan kräva minst ett)
-  const body: Record<string, unknown> = {};
-  if (playerId) body.playerId = playerId;
-  if (playerName) body.playerName = playerName;
-
-  const res = await fetch(
-    `${BASE}/lobbies/${encodeURIComponent(lobbyCode)}/ready-toggle`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    }
-  );
-  if (!res.ok) throw new Error("Failed to toggle ready");
-  return res.json();
+  const url = `${BASE}/lobby/find/${encodeURIComponent(String(lobbyId))}`;
+  const res = await fetch(url);
+  return (await parseJsonOrThrow(res, "GET /lobby/find")) as ServerLobbyDTO;
 }
 
-/** Startar spelet i en lobby. Kräver backend. */
-export async function startGame(lobbyCode: string): Promise<void> {
-  // Kräver backend (POST: start game)
-  if (!isBackendConfigured) throw new Error(BACKEND_NOT_ENABLED_MSG);
-
-  const res = await fetch(
-    `${BASE}/lobbies/${encodeURIComponent(lobbyCode)}/start`,
-    { method: "POST" }
-  );
-  if (!res.ok) throw new Error("Failed to start game");
+/** Lämna lobby
+ * Backend: POST /api/lobby/leave/{lobbyCode}/{playerId}
+ * Returnerar den uppdaterade lobbyn (ServerLobbyDTO) eller id=null om lobbyn blev tom.
+ */
+export async function leaveLobby(params: { lobbyCode: string; playerId: number }) {
+  const res = await fetch(`${BASE}/lobby/leave/${params.lobbyCode}/${params.playerId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || "Leave failed");
+  }
+  return (await res.json()) as {
+    id: number | null;
+    lobbyCode: string;
+    players: Array<{ id: number; playerName: string; isHost: boolean; ready?: boolean; score?: number }>;
+    gameState: string;
+  };
 }
 
-/** Låter en spelare lämna en lobby. Kräver backend. */
-export async function leaveLobby(
-  lobbyCode: string,
-  playerId?: string,
-  playerName?: string
-): Promise<void> {
-  // Kräver backend (POST: lämna lobby)
-  if (!isBackendConfigured) throw new Error(BACKEND_NOT_ENABLED_MSG);
-
-  const res = await fetch(
-    `${BASE}/lobbies/${encodeURIComponent(lobbyCode)}/leave`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerId, playerName }),
-    }
-  );
-  if (!res.ok) throw new Error("Failed to leave lobby");
-}
