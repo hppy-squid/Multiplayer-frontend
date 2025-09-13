@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Card } from "../components/ui/Card";
 import { TabList } from "../components/ui/TabList";
@@ -8,176 +8,252 @@ import { Button } from "../components/ui/Button";
 import { Divider } from "../components/ui/Divider";
 import { GroupIcon } from "../components/icons";
 
+import SockJS from "sockjs-client/dist/sockjs.js";
+import { Client } from "@stomp/stompjs";
+import type { IMessage } from "@stomp/stompjs";
+import { WS_BASE, APP, TOPIC } from "../ws/endpoints";
 import {
   createLobby,
   joinLobby,
   isBackendConfigured,
-  BACKEND_NOT_ENABLED_MSG,
   FIXED_MAX_PLAYERS,
 } from "../api/lobby";
-
 import { ensurePlayer } from "../api/ensurePlayer";
-import type { PlayerDTO } from "../types";
+import type {
+  PlayerDTO,
+  LobbyLocationState,
+  ServerPlayer,
+  GameState,
+} from "../types/types";
 
+
+// Sidan för att skapa/gå med i lobby + se väntrummet
 export default function LobbyPage() {
   const navigate = useNavigate();
-  // Läs lobbykod från URL (om vi redan är i väntrummet)
+
+  // Läser /lobby/:code → om code finns är vi i väntrummet ("waiting")
   const { code } = useParams<{ code: string }>();
+  const location = useLocation() as { state?: LobbyLocationState };
 
-  // Data som skickats via navigate(..., { state: {...} })
-  const location = useLocation() as {
-    state?: { isHost?: boolean; playerId?: string; playerName?: string };
-  };
-
-  // === Mode: waiting om :code finns ===
+  // === Flagga för väntrum ===
   const isWaiting = Boolean(code);
   const lobbyCode = useMemo(() => (code ?? "").toUpperCase(), [code]);
 
-  // === Delad state för Join/Create ===
+  // === UI state (join/create) ===
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [codeInput, setCodeInput] = useState("");
 
+  // Städar kodfältet (tar bort mellanslag)
   const normalizedCode = useMemo(
     () => codeInput.replace(/\s+/g, "").trim(),
     [codeInput]
   );
 
-  // Dev-test: enkel testkod som fungerar utan backend
+  // Dev-test utan backend (kan tas bort när backend alltid är på)
   const TEST_CODE = (import.meta.env.VITE_TEST_LOBBY_CODE as string) || "123456";
   const TEST_MODE = import.meta.env.DEV && !isBackendConfigured;
 
-  // När kan man trycka "Join"?
+  // När får man trycka "Join"?
   const canJoin =
     !submitting &&
     (TEST_MODE ? normalizedCode === TEST_CODE : normalizedCode.length > 0);
 
-  // === Stabil spelidentitet (gäller både join/create och waiting) ===
-  // Hämta id/namn från state -> session -> local -> fallback
+   // === Identitet (id/namn) — sparas i sessionStorage så den överlever navigering ===
   const myId =
     location.state?.playerId ??
     sessionStorage.getItem("playerId") ??
     localStorage.getItem("playerId") ??
     crypto.randomUUID();
 
-  const myName = (
+  const rawName =
     location.state?.playerName ??
     sessionStorage.getItem("playerName") ??
     localStorage.getItem("playerName") ??
-    name ??
-    "Player"
-  )
-    .toString()
-    .trim();
+    name;
 
+  const myName = String(rawName ?? "").trim() || "Player";
   const amHost = Boolean(location.state?.isHost);
+  const myIdStr = String(myId); // för UI-jämförelser
+  const myIdNum = Number(myId); // WS/REST (backend Long)
 
-  // Om vi landar direkt på /lobby/:code utan state — skriv identitet till sessionStorage
+  // Skriv id/namn till sessionStorage om det saknas
   useEffect(() => {
-    if (!sessionStorage.getItem("playerId")) sessionStorage.setItem("playerId", myId);
-    if (!sessionStorage.getItem("playerName")) sessionStorage.setItem("playerName", myName);
+    if (!sessionStorage.getItem("playerId")) {
+      sessionStorage.setItem("playerId", String(myId));
+    }
+    if (!sessionStorage.getItem("playerName")) {
+      sessionStorage.setItem("playerName", myName);
+    }
   }, [myId, myName]);
 
-  // === Players: starta tomt; när vi är i waiting, lägg till "mig" om jag saknas ===
+  // === Spelarlistan som visas i UI ===
   const [players, setPlayers] = useState<PlayerDTO[]>([]);
 
+  // Hjälp: mappa server-spelare -> UI-spelare
+  const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
+    arr.map((p) => ({
+      id: String(p.id),
+      playerName: p.playerName,
+      score: p.score,
+      isHost: p.isHost,
+      ready: !!p.ready,
+    }));
+
+  // Initial hydra: ta spelare direkt från navigate(..., { state.initialPlayers })
+  // Detta gör att listan syns direkt även om första WS-meddelandet dröjer
   useEffect(() => {
     if (!isWaiting) return;
 
-    setPlayers((prev) => {
-      // Redan med? Låt listan vara.
-      if (prev.some((p) => p.id === myId)) return prev; 
-      // Annars lägg in mig som första spelare
-      const me: PlayerDTO = {
-        id: myId,
-        playerName: myName,
-        score: 0,
-        isHost: amHost,
-        ready: false,
-      };
-      return [me, ...prev];
-    });
-  }, [isWaiting, lobbyCode, myId, myName, amHost]);
-
-  // === Actions: Create (skapa ny lobby som host) ===
-  const handleCreate = async () => {
-    if (!isBackendConfigured || !name.trim() || submitting) return;
-    setSubmitting(true);
-    try {
-      // Säkerställ att vi har playerId/playerName i sessionStorage
-      const { playerId, playerName } = await ensurePlayer(name); 
-      // Skapa lobby och navigera till väntrummet som host
-      const { lobbyCode } = await createLobby({ hostName: playerName });
-      navigate(`/lobby/${lobbyCode}`, {
-        state: { isHost: true, playerId, playerName },
-      });
-    } catch (err) {
-      console.error(err);
-      alert(BACKEND_NOT_ENABLED_MSG);
-    } finally {
-      setSubmitting(false);
+    const initial: ServerPlayer[] | undefined = location.state?.initialPlayers;
+    if (initial?.length) {
+      setPlayers(toUI(initial));
+      return;
     }
-  };
 
-  // === Actions: Join (gå med i befintlig lobby) ===
+  }, [isWaiting, lobbyCode, isBackendConfigured, location.state]);
+
+  // === WebSocket/STOMP — lyssna på lobbyuppdateringar ===
+  const stompRef = useRef<Client | null>(null);
+
+  useEffect(() => {
+    if (!isWaiting || !isBackendConfigured) return;
+
+    // Skapa STOMP-klient som ansluter via SockJS till din backend (/ws)
+    const client = new Client({
+      webSocketFactory: () => new SockJS(WS_BASE),
+      reconnectDelay: 1000,
+      debug: (msg) => {
+        if (import.meta.env.DEV) console.log("[STOMP]", msg);
+      },
+    });
+
+    client.onConnect = () => {
+      // Prenumerera på lobby-topic → får nya spelarlisor vid join/leave/ready m.m.
+      client.subscribe(TOPIC.LOBBY(lobbyCode), (frame: IMessage) => {
+        const dto = JSON.parse(frame.body) as { players: ServerPlayer[]; gameState?: GameState };
+        setPlayers(toUI(dto.players));
+      });
+
+      // (exempel) fler topics:
+      // client.subscribe(TOPIC.RESPONSE(lobbyCode), ...);
+      // client.subscribe(TOPIC.READY(lobbyCode), ...);
+    };
+
+    client.onStompError = (f) => {
+      console.error("Broker error:", f.headers["message"], f.body);
+    };
+
+    client.activate();
+    stompRef.current = client;
+
+    // Stäng anslutning när komponenten unmountas eller lobbyCode ändras
+    return () => {
+      client.deactivate();
+      stompRef.current = null;
+    };
+  }, [isWaiting, isBackendConfigured, lobbyCode]);
+
+
+  // === Actions ===
+
+  // Skapa lobby → backend returnerar hela lobbyn → navigera till väntrummet med initialPlayers
+  const handleCreate = async () => {
+  if (!isBackendConfigured || !name.trim() || submitting) return;
+  setSubmitting(true);
+  try {
+    // Säkerställ att det finns en spelare i backend
+    const { playerId, playerName } = await ensurePlayer(name);
+
+    // Skapa lobby → får tillbaka spelarlisan (inkl. host)
+    const dto = await createLobby({ playerId });
+
+    // Navigera till väntrummet och skicka med initialPlayers (hydra direkt)
+    navigate(`/lobby/${dto.lobbyCode}`, {
+      state: {
+        isHost: true,
+        playerId,
+        playerName,
+        initialPlayers: dto.players,  
+        gameState: dto.gameState,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    alert(err instanceof Error ? err.message : "Okänt fel vid skapande av lobby");
+  } finally {
+    setSubmitting(false);
+  }
+};
+
+
+  // Gå med i befintlig lobby
   const handleJoin = async () => {
     if (!canJoin) return;
     setSubmitting(true);
     try {
-      // Säkerställ identitet först
-      const { playerId, playerName } = await ensurePlayer(name); 
+      const { playerId, playerName } = await ensurePlayer(name);
 
-      // Dev-läge: hoppa över backend om koden matchar testkod
+      // Dev-genväg: endast testkod när backend inte körs
       if (TEST_MODE && normalizedCode === TEST_CODE) {
-        await new Promise((r) => setTimeout(r, 120));
         navigate(`/lobby/${TEST_CODE}`, {
           state: { isHost: false, playerId, playerName },
         });
         return;
       }
 
-      // Prod-läge: anropa backend
-      const { lobbyCode } = await joinLobby({
-        lobbyCode: normalizedCode,
-        playerName,
-      });
-      // In i väntrummet
-      navigate(`/lobby/${lobbyCode}`, {
-        state: { isHost: false, playerId, playerName },
+      // Riktig join → backend returnerar hela lobbyn (inkl. nuvarande spelare)
+      const dto = await joinLobby({ lobbyCode: normalizedCode, playerId });
+
+      // Navigera och skicka med initialPlayers för direkt visning
+      navigate(`/lobby/${dto.lobbyCode}`, {
+        state: {
+          isHost: false,
+          playerId,
+          playerName,
+          initialPlayers: dto.players, // hydra direkt för att undvika WS-race
+          gameState: dto.gameState,
+        },
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : BACKEND_NOT_ENABLED_MSG;
-      console.error(err);
-      alert(message);
+      alert(err instanceof Error ? err.message : "Kunde inte gå med i lobbyn");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // === Actions: Waiting (när vi redan är i väntrummet) ===
-  const handleLeave = () => navigate("/", { replace: true });   // tillbaka till start
+  // Gå tillbaka till startsidan
+  const handleLeave = () => navigate("/", { replace: true });
+
+  // Starta spelet (just nu bara navigering — lägg WS publish här om backend stödjer)
   const handleStart = () => {
-    if (!amHost) return;   // bara host får starta
+    if (!amHost) return;
     navigate(`/game/${lobbyCode}`, { state: { fromWaitingRoom: true } });
   };
 
-  // Ready-toggle (lokal i dev / tills backend finns)
+  // Toggle "ready" — lokal toggle i dev, annars publicera via WS
   const USE_LOCAL_READY = import.meta.env.DEV || !isBackendConfigured;
   const handleToggleReady = async () => {
     if (USE_LOCAL_READY) {
-      // Toggla bara min egen status i local state
       setPlayers((prev) =>
-        prev.map((p) => (p.id === myId ? { ...p, ready: !p.ready } : p))
+        prev.map((p) =>
+          String(p.id) === myIdStr ? { ...p, ready: !p.ready } : p
+        )
       );
       return;
     }
-    // Backend-läge senare:
-    // const dto = await toggleReady(lobbyCode, myId, myName);
-    // setPlayers(dto.players);
+    if (stompRef.current) {
+      stompRef.current.publish({
+        destination: APP.READY(lobbyCode),
+        body: JSON.stringify({ playerId: myIdNum, playerName: myName }),
+      });
+    }
   };
 
-  // === Waiting UI (vänster-litet kort: lobby+spelare, mitt-kort: knappar) ===
+
+
+   // === Väntrumsvy ===
   if (isWaiting) {
     const maxPlayers = FIXED_MAX_PLAYERS;
     const slots = Array.from({ length: maxPlayers }, (_, i) => i);
@@ -185,7 +261,8 @@ export default function LobbyPage() {
     return (
       <div className="min-h-screen flex justify-center p-6 pt-8">
         <div className="flex items-start justify-center gap-6 w-full">
-          {/* Vänster: mindre card med lobby + spelare */}
+
+          {/* Vänster: Lobby + players */}
           <div className="w-80 shrink-0">
             <Card className="w-full">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Lobby</h2>
@@ -198,44 +275,42 @@ export default function LobbyPage() {
                   Players ({players.length}/{maxPlayers})
                 </div>
 
-                {/* Lista spelare eller placeholders (Player 1–4) */}
                 <div className="grid grid-cols-1 gap-2 text-left">
                   {slots.map((i) => {
                     const p = players[i];
-                    // Om det finns en spelare i sloten — visa namn + chips
                     if (p) {
                       return (
                         <div
-                          key={p.id}
+                          key={`${p.id}-${i}`}
                           className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
                         >
                           <div className="flex items-center gap-2 w-full">
                             <span className="font-medium truncate">{p.playerName}</span>
 
-                            {/* Host-chip */}
+                            {/* Visar "Host"-chip */}
                             {p.isHost && (
                               <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
                                 Host
                               </span>
                             )}
 
-                            {/* “Du”-chip */}
-                            {p.id === myId && (
+                            {/* Visar "Du"-chip för mig själv */}
+                            {String(p.id) === myIdStr && (
                               <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">
                                 Du
                               </span>
                             )}
 
-                            {/* Ready/Unready: jag får klicka, andra visas som status */}
                             <div className="ml-auto">
-                              {p.id === myId ? (
+                              {String(p.id) === myIdStr ? (
                                 <button
                                   type="button"
                                   onClick={handleToggleReady}
-                                  className={`rounded-full px-2 py-0.5 text-xs transition-colors ${p.ready
+                                  className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
+                                    p.ready
                                       ? "bg-emerald-600 text-white hover:bg-emerald-700"
                                       : "bg-gray-300 text-gray-800 hover:bg-gray-400"
-                                    }`}
+                                  }`}
                                   aria-pressed={p.ready}
                                   title={p.ready ? "Unready" : "Ready"}
                                 >
@@ -243,10 +318,11 @@ export default function LobbyPage() {
                                 </button>
                               ) : (
                                 <span
-                                  className={`rounded-full px-2 py-0.5 text-xs ${p.ready
+                                  className={`rounded-full px-2 py-0.5 text-xs ${
+                                    p.ready
                                       ? "bg-emerald-100 text-emerald-700"
                                       : "bg-gray-100 text-gray-600"
-                                    }`}
+                                  }`}
                                 >
                                   {p.ready ? "Ready" : "Not ready"}
                                 </span>
@@ -257,7 +333,7 @@ export default function LobbyPage() {
                       );
                     }
 
-                    // Placeholder-slot (vänsterställt)
+                    // Tomma platser (placeholder-kort)
                     return (
                       <div
                         key={`slot-${i}`}
@@ -273,7 +349,8 @@ export default function LobbyPage() {
             </Card>
           </div>
 
-          {/* Mitten: huvudkort med actions (samma storlek som på start) */}
+
+          {/* Mitten: huvud-actions */}
           <div className="self-start shrink-0">
             <Card className="w-[500px] h-[520px]">
               <div className="flex justify-center mb-4">
@@ -283,9 +360,7 @@ export default function LobbyPage() {
                 QUIZ GAME
               </h1>
 
-              {/* Primär- och sekundärknappar */}
               <div className="mt-24 flex flex-col items-center gap-4">
-                {/* Starta spel – större och centrerad */}
                 <div className="w-72">
                   <Button
                     type="button"
@@ -294,13 +369,12 @@ export default function LobbyPage() {
                     title={amHost ? undefined : "Endast värden kan starta"}
                     className="w-full py-3 text-lg"
                   >
-                    Starta spel
+                    Start Game
                   </Button>
                 </div>
 
                 <Divider />
 
-                {/* Leave – mindre knapp under */}
                 <div className="w-40">
                   <Button type="button" onClick={handleLeave} className="w-full">
                     Leave
@@ -308,7 +382,6 @@ export default function LobbyPage() {
                 </div>
               </div>
 
-              {/* Info när backend saknas */}
               {!isBackendConfigured && (
                 <>
                   <Divider />
@@ -321,28 +394,27 @@ export default function LobbyPage() {
             </Card>
           </div>
 
-          {/* Höger: tom spacer för att hålla mittkortet perfekt centrerat */}
+           {/* Högerspacer för centrerad layout */}
           <div className="w-80 shrink-0" aria-hidden />
         </div>
       </div>
     );
   }
 
-  // === Start/Join-läge (ingen :code i URL) ===
+
+
+  // === Start/Join-vy (innan man är i väntrummet) ===
   return (
     <div className="min-h-screen flex justify-center p-6 pt-8">
       <Card className="w-[500px] h-[520px]">
-        {/* Ikon */}
         <div className="flex justify-center mb-4">
           <GroupIcon sx={{ fontSize: 56 }} className="text-gray-800" />
         </div>
 
-        {/* Titel */}
         <h1 className="text-2xl font-bold text-center tracking-wider text-gray-900 mb-6">
           QUIZ GAME
         </h1>
 
-        {/* Tabbar */}
         <TabList>
           <TabButton active={activeTab === "join"} onClick={() => setActiveTab("join")}>
             <span className="mr-1">#</span> Join Lobby
@@ -352,9 +424,7 @@ export default function LobbyPage() {
           </TabButton>
         </TabList>
 
-        {/* Innehåll */}
-        <div >
-          {/* Namnfält */}
+        <div>
           <div className="mb-2">
             <TextField
               id="name"
@@ -367,8 +437,7 @@ export default function LobbyPage() {
           </div>
 
           {activeTab === "join" ? (
-            // --- JOIN ---
-            <div >
+            <div>
               <TextField
                 id="code"
                 label="Lobby Code"
@@ -379,14 +448,12 @@ export default function LobbyPage() {
                 onChange={(e) => setCodeInput(e.target.value)}
               />
 
-              {/* Dev-hjälptext */}
               {TEST_MODE && normalizedCode.length > 0 && normalizedCode !== TEST_CODE && (
                 <p className="text-xs text-amber-600">
                   Under utveckling funkar endast koden <code>{TEST_CODE}</code>.
                 </p>
               )}
 
-              {/* Join-knapp */}
               <Button type="button" onClick={handleJoin} disabled={!canJoin}>
                 {submitting ? "Joining..." : (
                   <>
@@ -398,16 +465,13 @@ export default function LobbyPage() {
               <Divider />
             </div>
           ) : (
-
-            // --- CREATE ---
-            <div >
+            <div>
               {!isBackendConfigured && (
                 <p className="text-xs text-gray-500">
                   Backend inte konfigurerad. Sätt <code>VITE_API_BASE</code> i din <code>.env</code>.
                 </p>
               )}
 
-              {/* Extra luft mellan namnfältet och knappen */}
               <div className="mt-6">
                 <Button
                   type="button"

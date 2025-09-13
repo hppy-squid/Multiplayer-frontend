@@ -21,6 +21,14 @@ npm install react-router-dom
 npm install -D @types/react-router-dom
 ```
 
+### Web socket
+
+```
+npm install sockjs-client stompjs
+npm i @stomp/stompjs sockjs-client
+npm i -D @types/sockjs-client
+```
+
 
 ## Utveckling
 
