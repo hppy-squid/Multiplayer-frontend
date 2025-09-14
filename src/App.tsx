@@ -2,7 +2,6 @@ import './App.css'
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import  LobbyPage from './pages/LobbyPage'
-// import { WaitingRoomPage } from "./pages/WaitingRoomPage";
 import { QuizPage } from "./pages/QuizPage";
 
 
@@ -16,13 +15,11 @@ function App() {
       <Route path="/lobby" element={<LobbyPage />} />
       
       {/* /lobby/:lobbyCode → väntsal för en specifik lobby */}
-
+      <Route path="/lobby/:code" element={<LobbyPage />} />
 
 
       {/* sidan där quizet sker */}
-      <Route path="/quiz" element={<QuizPage />} />
-
-      <Route path="/lobby/:code" element={<LobbyPage />} />
+      <Route path="/game/:code" element={<QuizPage />} />
 
     </Routes>
   )

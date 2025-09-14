@@ -4,6 +4,7 @@ export const WS_BASE =
 export const APP = {
   READY:    (code: string) => `/app/game/${code}/ready`,
   RESPONSE: (code: string) => `/app/game/${code}/response`,
+  START:    (code: string) => `/app/game/${code}/start`, 
 };
 
 export const TOPIC = {

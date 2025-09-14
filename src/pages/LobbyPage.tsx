@@ -16,7 +16,6 @@ import {
   createLobby,
   joinLobby,
   isBackendConfigured,
-  FIXED_MAX_PLAYERS,
   leaveLobby
 } from "../api/lobby";
 import { ensurePlayer } from "../api/ensurePlayer";
@@ -26,11 +25,13 @@ import type {
   ServerPlayer,
   GameState,
 } from "../types/types";
+import { LobbySidebar } from "../components/lobby/LobbySidebar";
 
 
 // Sidan för att skapa/gå med i lobby + se väntrummet
 export default function LobbyPage() {
   const navigate = useNavigate();
+  const hasNavigatedRef = useRef(false); // förhindra dubbel-navigering vid WS-meddelanden
 
   // Läser /lobby/:code → om code finns är vi i väntrummet ("waiting")
   const { code } = useParams<{ code: string }>();
@@ -80,7 +81,7 @@ export default function LobbyPage() {
     localStorage.getItem("playerName") ??
     "";
   const myName = String(rawName ?? "").trim() || "Player";
-  
+
 
   // Spara playerId/playerName i sessionStorage när vi säkert har dem
   useEffect(() => {
@@ -144,7 +145,27 @@ export default function LobbyPage() {
       // Prenumerera på lobby-topic → får nya spelarlisor vid join/leave/ready m.m.
       client.subscribe(TOPIC.LOBBY(lobbyCode), (frame: IMessage) => {
         const dto = JSON.parse(frame.body) as { players: ServerPlayer[]; gameState?: GameState };
-        setPlayers(toUI(dto.players));
+
+        // Uppdatera spelarlistan
+        const uiPlayers = toUI(dto.players);
+        setPlayers(uiPlayers);
+
+        // Uppdatera också om jag är host (kan ha ändrats)
+        const me = uiPlayers.find(p => String(p.id) === myIdStr);
+        const isHostNow = !!me?.isHost;
+
+        // 2) Om gameState ändrats till IN_GAME → navigera till QuizPage
+        if (dto.gameState === "IN_GAME" && !hasNavigatedRef.current) {
+          hasNavigatedRef.current = true;
+          navigate(`/game/${lobbyCode}`, {
+            state: {
+              initialPlayers: uiPlayers,   
+              playerId: myIdNum,
+              playerName: myName,
+              isHost: isHostNow,        
+            },
+          });
+        }
       });
 
       // (exempel) fler topics:
@@ -282,7 +303,17 @@ export default function LobbyPage() {
   // Starta spelet (just nu bara navigering — lägg WS publish här om backend stödjer)
   const handleStart = () => {
     if (!amHost) return;
-    navigate(`/game/${lobbyCode}`, { state: { fromWaitingRoom: true } });
+    if (myIdNum === undefined) {
+      alert("Saknar giltigt playerId.");
+      return;
+    }
+    // Publicera via WS
+    stompRef.current?.publish({
+      destination: APP.START(lobbyCode),
+      body: JSON.stringify({ playerId: myIdNum }),
+      headers: { "content-type": "application/json" },
+    });
+   
   };
 
   // Toggle "ready" —  publicera via WS
@@ -299,12 +330,6 @@ export default function LobbyPage() {
     setIsReady(p => !p);
   };
 
-  const PLAYER_COLORS = [
-    { bg: "#FDF6B2", text: "#92400E" }, // pastellgul/vanilj
-    { bg: "#FFE5B4", text: "#92400E" }, // ljusare aprikos/persika
-    { bg: "#DBEAFE", text: "#1E3A8A" }, // babyblå
-    { bg: "#FDE2E4", text: "#9D174D" }, // babyrosa
-  ];
 
   const [isReady, setIsReady] = useState(false);
 
@@ -312,8 +337,6 @@ export default function LobbyPage() {
 
   // === Väntrumsvy ===
   if (isWaiting) {
-    const maxPlayers = FIXED_MAX_PLAYERS;
-    const slots = Array.from({ length: maxPlayers }, (_, i) => i);
 
     return (
       <div className="min-h-screen flex justify-center p-6 pt-8">
@@ -321,128 +344,18 @@ export default function LobbyPage() {
 
           {/* Vänster: Lobby + players */}
           <div className="w-80 shrink-0">
-            <Card className="w-full">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Lobby</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                <span className="font-mono font-semibold">{lobbyCode || "—"}</span>
-              </p>
-              <Divider />
-              <div className="mt-4">
-                <div className="text-sm text-gray-500 mb-2">
-                  Players ({players.length}/{maxPlayers})
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 text-left">
-                  {slots.map((i) => {
-                    const p = players[i];
-                    const color = PLAYER_COLORS[i];
-                    if (p) {
-                      return (
-                        <div
-                          key={`${p.id}-${i}`}
-                          className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
-                          style={{ backgroundColor: color.bg, color: color.text }}
-                        >
-                          <div className="flex items-center gap-2 w-full">
-                            <span className="font-medium truncate">{p.playerName}</span>
-
-                            {/* Visar "Host"-chip */}
-                            {p.isHost && (
-                              <span
-                                className="rounded-full px-2 py-0.5 text-xs"
-                                style={{
-                                  backgroundColor: "rgba(255,255,255,0.6)",
-                                  color: color.text,
-                                  border: `1px solid ${color.text}`
-                                }}
-                              >
-                                Host
-                              </span>
-                            )}
-
-                            {/* Visar "Du"-chip för mig själv */}
-                            {String(p.id) === myIdStr && (
-                              <span
-                                className="rounded-full px-2 py-0.5 text-xs"
-                                style={{
-                                  backgroundColor: "rgba(255,255,255,0.6)",
-                                  color: color.text,
-                                  border: `1px solid ${color.text}`
-                                }}
-                              >
-                                You
-                              </span>
-                            )}
-
-                            <div className="ml-auto">
-                              {String(p.id) === myIdStr ? (
-                                <button
-                                  type="button"
-                                  onClick={handleToggleReady}
-                                  aria-pressed={p.ready}
-                                  className="rounded-full px-2 py-0.5 text-xs transition-colors"
-                                  style={
-                                    p.ready
-                                      ? {
-                                        backgroundColor: "hsl(140, 60%, 90%)",
-                                        color: "hsl(140, 30%, 25%)",
-                                        border: "1px solid hsl(140, 40%, 65%)"
-                                      }
-                                      : {
-                                        backgroundColor: "hsl(0, 0%, 95%)",
-                                        color: "hsl(0, 0%, 30%)",
-                                        border: "1px solid hsl(0, 0%, 75%)"
-                                      }
-                                  }
-                                >
-                                  {p.ready ? "Ready!" : "Ready?"}
-                                </button>
-                              ) : (
-                                <span
-                                  className="rounded-full px-2 py-0.5 text-xs"
-                                  style={
-                                    p.ready
-                                      ? {
-                                        backgroundColor: "hsl(140, 60%, 90%)",
-                                        color: "hsl(140, 30%, 25%)",
-                                        border: "1px solid hsl(140, 40%, 65%)"
-                                      }
-                                      : {
-                                        backgroundColor: "hsl(0, 0%, 95%)",
-                                        color: "hsl(0, 0%, 30%)",
-                                        border: "1px solid hsl(0, 0%, 75%)"
-                                      }
-                                  }
-                                >
-                                  {p.ready ? "Ready" : "Not ready"}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // Tomma platser (placeholder-kort)
-                    return (
-                      <div
-                        key={`slot-${i}`}
-                        className="flex items-center justify-start rounded-lg border border-dashed bg-gray-50 px-3 py-2 text-gray-400"
-                      >
-                        <span className="font-medium">{`Player ${i + 1}`}</span>
-                        <span className="ml-2"></span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </Card>
+            <LobbySidebar
+              lobbyCode={lobbyCode}
+              players={players}
+              myIdStr={myIdStr}
+              onToggleReady={handleToggleReady}
+              maxPlayers={4}
+            />
           </div>
-
-
+            
           {/* Mitten: huvud-actions */}
           <div className="self-start shrink-0">
-            <Card className="w-[500px] h-[520px]">
+            <Card className="w-[800px] h-[520px]">
               <div className="flex justify-center mb-4">
                 <GroupIcon sx={{ fontSize: 56 }} className="text-gray-800" />
               </div>
@@ -485,7 +398,7 @@ export default function LobbyPage() {
           </div>
 
           {/* Högerspacer för centrerad layout */}
-          <div className="w-80 shrink-0" aria-hidden />
+          <div className="w-20 shrink-0" aria-hidden />
         </div>
       </div>
     );

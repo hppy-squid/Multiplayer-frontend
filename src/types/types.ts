@@ -8,7 +8,7 @@ export type LobbyLocationState = {
 };
 
 // --- UI-typer (vad komponenterna använder) ---
-export type GameState = "WAITING" | "IN_PROGRESS" | "FINISHED";
+export type GameState = "WAITING" | "IN_PROGRESS" | "IN_GAME" | "FINISHED";
 
 export type PlayerDTO = {
   id: string;          // UI-id som string
