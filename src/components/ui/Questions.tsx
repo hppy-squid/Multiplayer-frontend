@@ -3,6 +3,7 @@ import { Button } from "./Button";
 import { Divider } from "./Divider";
 import { getQuestionAndOptions } from "../../api/QuestionsApi";
 import { useEffect, useState } from "react";
+import type {QuizTimerState} from "./QuizTime.tsx";
 
 
 /**
@@ -33,6 +34,22 @@ export function Questions() {
   // UI-tillstånd
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const checkTimer = () => {
+      const timer: QuizTimerState | undefined = window.quizTimer;
+      if (timer) {
+        // Efter att resultatet för frågan har visats, gå till nästa fråga
+        if (timer.phase === 'question' && timer.timeLeft === 15) {
+          nextQuestion();
+        }
+      }
+    };
+
+    // Kolla varje sekund
+    const interval = setInterval(checkTimer, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Slumpa fram vilken fråga som visas
   useEffect(() => {
