@@ -61,36 +61,46 @@ export default function LobbyPage() {
     !submitting &&
     (TEST_MODE ? normalizedCode === TEST_CODE : normalizedCode.length > 0);
 
-   // === Identitet (id/namn) — sparas i sessionStorage så den överlever navigering ===
-  const myId =
-    location.state?.playerId ??
-    sessionStorage.getItem("playerId") ??
-    localStorage.getItem("playerId") ??
-    crypto.randomUUID();
+  // === Identitet (id/namn) ===
+  const navId = location.state?.playerId as number | undefined; // från ensurePlayer() via navigate state
 
+  const storedIdStr =
+    sessionStorage.getItem("playerId") ?? localStorage.getItem("playerId");
+  const storedId =
+    storedIdStr && /^\d+$/.test(storedIdStr) ? Number(storedIdStr) : undefined;
+
+  // Endast numeriskt playerId som backend känner till
+  const myIdNum: number | undefined = typeof navId === "number" ? navId : storedId;
+  const myIdStr = myIdNum !== undefined ? String(myIdNum) : "";
+
+  // Namn
   const rawName =
     location.state?.playerName ??
     sessionStorage.getItem("playerName") ??
     localStorage.getItem("playerName") ??
-    name;
-
+    "";
   const myName = String(rawName ?? "").trim() || "Player";
-  const amHost = Boolean(location.state?.isHost);
-  const myIdStr = String(myId); // för UI-jämförelser
-  const myIdNum = Number(myId); // WS/REST (backend Long)
+  
 
-  // Skriv id/namn till sessionStorage om det saknas
+  // Spara playerId/playerName i sessionStorage när vi säkert har dem
   useEffect(() => {
-    if (!sessionStorage.getItem("playerId")) {
-      sessionStorage.setItem("playerId", String(myId));
+    if (typeof navId === "number") {
+      sessionStorage.setItem("playerId", String(navId));
     }
-    if (!sessionStorage.getItem("playerName")) {
+    if (myName) {
       sessionStorage.setItem("playerName", myName);
     }
-  }, [myId, myName]);
+  }, [navId, myName]);
 
   // === Spelarlistan som visas i UI ===
   const [players, setPlayers] = useState<PlayerDTO[]>([]);
+
+  // Är jag host? (först från navigation state, annars från players-listan)
+  const amHost = useMemo(() => {
+    if (location.state?.isHost != null) return Boolean(location.state.isHost);
+    const me = players.find(p => String(p.id) === myIdStr);
+    return !!me?.isHost;
+  }, [location.state?.isHost, players, myIdStr]);
 
   // Hjälp: mappa server-spelare -> UI-spelare
   const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
@@ -161,32 +171,32 @@ export default function LobbyPage() {
 
   // Skapa lobby → backend returnerar hela lobbyn → navigera till väntrummet med initialPlayers
   const handleCreate = async () => {
-  if (!isBackendConfigured || !name.trim() || submitting) return;
-  setSubmitting(true);
-  try {
-    // Säkerställ att det finns en spelare i backend
-    const { playerId, playerName } = await ensurePlayer(name);
+    if (!isBackendConfigured || !name.trim() || submitting) return;
+    setSubmitting(true);
+    try {
+      // Säkerställ att det finns en spelare i backend
+      const { playerId, playerName } = await ensurePlayer(name);
 
-    // Skapa lobby → får tillbaka spelarlisan (inkl. host)
-    const dto = await createLobby({ playerId });
+      // Skapa lobby → får tillbaka spelarlisan (inkl. host)
+      const dto = await createLobby({ playerId });
 
-    // Navigera till väntrummet och skicka med initialPlayers (hydra direkt)
-    navigate(`/lobby/${dto.lobbyCode}`, {
-      state: {
-        isHost: true,
-        playerId,
-        playerName,
-        initialPlayers: dto.players,  
-        gameState: dto.gameState,
-      },
-    });
-  } catch (err) {
-    console.error(err);
-    alert(err instanceof Error ? err.message : "Okänt fel vid skapande av lobby");
-  } finally {
-    setSubmitting(false);
-  }
-};
+      // Navigera till väntrummet och skicka med initialPlayers (hydra direkt)
+      navigate(`/lobby/${dto.lobbyCode}`, {
+        state: {
+          isHost: true,
+          playerId,
+          playerName,
+          initialPlayers: dto.players,
+          gameState: dto.gameState,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Okänt fel vid skapande av lobby");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
 
   // Gå med i befintlig lobby
@@ -231,10 +241,14 @@ export default function LobbyPage() {
       // stäng ev. WS snyggt
       if (stompRef.current) {
         try { await stompRef.current.deactivate(); } catch {// ignore 
-          }
+        }
         stompRef.current = null;
       }
       navigate("/", { replace: true });
+      return;
+    }
+    if (myIdNum === undefined) {            // guard
+      alert("Saknar giltigt playerId – skapa/gå med i en lobby först.");
       return;
     }
 
@@ -246,7 +260,7 @@ export default function LobbyPage() {
       if (dto.id == null || dto.players.length === 0) {
         if (stompRef.current) {
           try { await stompRef.current.deactivate(); } catch {// ignore
-            }
+          }
           stompRef.current = null;
         }
         navigate("/", { replace: true });
@@ -256,7 +270,7 @@ export default function LobbyPage() {
       // 3) Om lobbyn fortfarande finns: vi lämnar ändå sidan (du lämnar ju lobbyn)
       if (stompRef.current) {
         try { await stompRef.current.deactivate(); } catch {//ignore 
-          }
+        }
         stompRef.current = null;
       }
       navigate("/", { replace: true });
@@ -271,28 +285,32 @@ export default function LobbyPage() {
     navigate(`/game/${lobbyCode}`, { state: { fromWaitingRoom: true } });
   };
 
-  // Toggle "ready" — lokal toggle i dev, annars publicera via WS
-  const USE_LOCAL_READY = import.meta.env.DEV || !isBackendConfigured;
-  const handleToggleReady = async () => {
-    if (USE_LOCAL_READY) {
-      setPlayers((prev) =>
-        prev.map((p) =>
-          String(p.id) === myIdStr ? { ...p, ready: !p.ready } : p
-        )
-      );
+  // Toggle "ready" —  publicera via WS
+  const handleToggleReady = () => {
+    if (myIdNum === undefined) {
+      alert("Saknar giltigt playerId – skapa/gå med i en lobby först.");
       return;
     }
-    if (stompRef.current) {
-      stompRef.current.publish({
-        destination: APP.READY(lobbyCode),
-        body: JSON.stringify({ playerId: myIdNum, playerName: myName }),
-      });
-    }
+    stompRef.current?.publish({
+      destination: APP.READY(lobbyCode),
+      body: JSON.stringify({ playerId: myIdNum, playerName: myName, ready: !isReady }),
+      headers: { "content-type": "application/json" },
+    });
+    setIsReady(p => !p);
   };
 
+  const PLAYER_COLORS = [
+    { bg: "#FDF6B2", text: "#92400E" }, // pastellgul/vanilj
+    { bg: "#FFE5B4", text: "#92400E" }, // ljusare aprikos/persika
+    { bg: "#DBEAFE", text: "#1E3A8A" }, // babyblå
+    { bg: "#FDE2E4", text: "#9D174D" }, // babyrosa
+  ];
+
+  const [isReady, setIsReady] = useState(false);
 
 
-   // === Väntrumsvy ===
+
+  // === Väntrumsvy ===
   if (isWaiting) {
     const maxPlayers = FIXED_MAX_PLAYERS;
     const slots = Array.from({ length: maxPlayers }, (_, i) => i);
@@ -317,26 +335,42 @@ export default function LobbyPage() {
                 <div className="grid grid-cols-1 gap-2 text-left">
                   {slots.map((i) => {
                     const p = players[i];
+                    const color = PLAYER_COLORS[i];
                     if (p) {
                       return (
                         <div
                           key={`${p.id}-${i}`}
                           className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
+                          style={{ backgroundColor: color.bg, color: color.text }}
                         >
                           <div className="flex items-center gap-2 w-full">
                             <span className="font-medium truncate">{p.playerName}</span>
 
                             {/* Visar "Host"-chip */}
                             {p.isHost && (
-                              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                              <span
+                                className="rounded-full px-2 py-0.5 text-xs"
+                                style={{
+                                  backgroundColor: "rgba(255,255,255,0.6)",
+                                  color: color.text,
+                                  border: `1px solid ${color.text}`
+                                }}
+                              >
                                 Host
                               </span>
                             )}
 
                             {/* Visar "Du"-chip för mig själv */}
                             {String(p.id) === myIdStr && (
-                              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">
-                                Du
+                              <span
+                                className="rounded-full px-2 py-0.5 text-xs"
+                                style={{
+                                  backgroundColor: "rgba(255,255,255,0.6)",
+                                  color: color.text,
+                                  border: `1px solid ${color.text}`
+                                }}
+                              >
+                                You
                               </span>
                             )}
 
@@ -345,23 +379,40 @@ export default function LobbyPage() {
                                 <button
                                   type="button"
                                   onClick={handleToggleReady}
-                                  className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-                                    p.ready
-                                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                      : "bg-gray-300 text-gray-800 hover:bg-gray-400"
-                                  }`}
                                   aria-pressed={p.ready}
-                                  title={p.ready ? "Unready" : "Ready"}
+                                  className="rounded-full px-2 py-0.5 text-xs transition-colors"
+                                  style={
+                                    p.ready
+                                      ? {
+                                        backgroundColor: "hsl(140, 60%, 90%)",
+                                        color: "hsl(140, 30%, 25%)",
+                                        border: "1px solid hsl(140, 40%, 65%)"
+                                      }
+                                      : {
+                                        backgroundColor: "hsl(0, 0%, 95%)",
+                                        color: "hsl(0, 0%, 30%)",
+                                        border: "1px solid hsl(0, 0%, 75%)"
+                                      }
+                                  }
                                 >
                                   {p.ready ? "Ready!" : "Ready?"}
                                 </button>
                               ) : (
                                 <span
-                                  className={`rounded-full px-2 py-0.5 text-xs ${
+                                  className="rounded-full px-2 py-0.5 text-xs"
+                                  style={
                                     p.ready
-                                      ? "bg-emerald-100 text-emerald-700"
-                                      : "bg-gray-100 text-gray-600"
-                                  }`}
+                                      ? {
+                                        backgroundColor: "hsl(140, 60%, 90%)",
+                                        color: "hsl(140, 30%, 25%)",
+                                        border: "1px solid hsl(140, 40%, 65%)"
+                                      }
+                                      : {
+                                        backgroundColor: "hsl(0, 0%, 95%)",
+                                        color: "hsl(0, 0%, 30%)",
+                                        border: "1px solid hsl(0, 0%, 75%)"
+                                      }
+                                  }
                                 >
                                   {p.ready ? "Ready" : "Not ready"}
                                 </span>
@@ -433,7 +484,7 @@ export default function LobbyPage() {
             </Card>
           </div>
 
-           {/* Högerspacer för centrerad layout */}
+          {/* Högerspacer för centrerad layout */}
           <div className="w-80 shrink-0" aria-hidden />
         </div>
       </div>
