@@ -1,9 +1,8 @@
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { Divider } from "./Divider";
-import { getQuestionAndOptions } from "../../api/QuestionsApi";
+import { getCorrectAnswer, getQuestionAndOptions } from "../../api/QuestionsApi";
 import { useEffect, useState } from "react";
-
 
 /**
  * Ändringar:
@@ -22,8 +21,11 @@ function shuffle<T>(array: T[]): T[] {
 
 // ViewModel för fråga → tydlig typ
 type QuestionVM = { text: string; options: string[] };
+type CorrectAnswerVM = { option_text: string };
 
-export function Questions() {
+
+export function Questions( ) {
+   
   // Kö med id:n att hämta
   const [ids, setIds] = useState<number[]>([]);
   // Vilket id visas nu
@@ -33,6 +35,10 @@ export function Questions() {
   // UI-tillstånd
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [guessed, setGuessed] = useState(false)
+  const [allGuessed, setAllGuessed] = useState(false);
+  const [guessedOption, setGuessedOption] = useState<string | null>(null);
+    const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
 
   // Slumpa fram vilken fråga som visas
   useEffect(() => {
@@ -75,6 +81,9 @@ export function Questions() {
           text: data[0].question ?? "Okänd fråga",
           options: shuffle(data.map((d) => d.option_text).filter(Boolean)),
         });
+           const correct = await getCorrectAnswer(currentId);
+        if (!alive) return;
+        setCorrectAnswer(correct.option_text);
       } catch (e: unknown) {
         if (!alive) return;   // undvik setState efter unmount
 
@@ -92,12 +101,21 @@ export function Questions() {
     };
   }, [currentId]);
 
-   
+   // Skicka gissning
+  const handleGuess = (option: string) => {
+    setGuessed(true);
+    setGuessedOption(option);
+  };
+  
     // Visa nästa fråga i kön (eller tom
     const nextQuestion = () => {
     setIds(prev => prev.slice(1)); 
     setCurrentId(ids[1] ?? null);  
+    setGuessed(false);
+    setAllGuessed(false);
+    setCorrectAnswer(null);
   };
+  
 
   return (
     <Card>
@@ -122,11 +140,39 @@ export function Questions() {
 
            {/*svarsalternativ */}
           <ul className="space-y-4">
-            {question.options.map((opt: string, index: number) => (
-              <li key={index}>{opt}</li>
-            ))}
+            {question.options.map((opt, index) => {
+              let className = "w-full";
+
+              if (guessed) {
+                if (opt === correctAnswer) {
+                  className += " bg-green-500 text-white"; // rätt svar
+                } else if (opt === guessedOption && opt !== correctAnswer) {
+                  className += " bg-red-500 text-white"; // fel gissning
+                } else {
+                  className += " bg-gray-200"; // övriga
+                }
+              }
+
+              return (
+                <li key={index}>
+                  <Button
+                    onClick={() => handleGuess(opt)}
+                    disabled={guessed}
+                    className={className}
+                  >
+                    {opt}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
 
+
+               {allGuessed && !correctAnswer && (
+        <div className="mt-4 text-blue-700 font-semibold text-center">
+          Väntar på rätt svar...
+        </div>
+      )}
            {/* Divider */}
           <Divider className="my-6" />
 
