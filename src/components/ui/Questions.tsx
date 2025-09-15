@@ -13,6 +13,7 @@ import { Button } from "./Button";
 import { Divider } from "./Divider";
 import { getQuestionAndOptions } from "../../api/QuestionsApi";
 import { useEffect, useState } from "react";
+import type {QuizTimerState} from "./QuizTime.tsx";
 
 
 /** Hjälpfunktion för att slumpa en array */
@@ -34,7 +35,25 @@ export function Questions() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initiera en kö med 50 fråge-ID:n i slumpad ordning
+
+  useEffect(() => {
+    const checkTimer = () => {
+      const timer: QuizTimerState | undefined = window.quizTimer;
+      if (timer) {
+        // Efter att resultatet för frågan har visats, gå till nästa fråga
+        if (timer.phase === 'question' && timer.timeLeft === 15) {
+          nextQuestion();
+        }
+      }
+    };
+
+    // Kolla varje sekund
+    const interval = setInterval(checkTimer, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Slumpa fram vilken fråga som visas
+
   useEffect(() => {
     const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
     setIds(shuffle(numbers));
