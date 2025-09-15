@@ -17,15 +17,14 @@ export const WS_BASE =
 
 // Endpoints för att SKICKA meddelanden till servern
 export const APP = {
-  READY:    (code: string) => `/app/game/${code}/ready`,
-  RESPONSE: (code: string) => `/app/game/${code}/response`,
-  START:    (code: string) => `/app/game/${code}/start`, 
+  READY:       (code: string) => `/app/game/${code}/ready`,
+  START:       (code: string) => `/app/game/${code}/start`,
+  ANSWER:      (code: string) => `/app/game/${code}/answer`, // nytt (alias till response)
   RESET_READY: (code: string) => `/app/lobby/${code}/resetReady`,
+  RESYNC:      (code: string) => `/app/lobby/${code}/resync`,   // <— NY
 };
 
 // Endpoints för att LYSSNA på serverns uppdateringar
 export const TOPIC = {
-  READY:    (code: string) => `/readycheck/${code}`,
-  RESPONSE: (code: string) => `/response/${code}`,
-  LOBBY:    (code: string) => `/lobby/${code}`,  
+  LOBBY: (code: string) => `/lobby/${code}`,
 };
