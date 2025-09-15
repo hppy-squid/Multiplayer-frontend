@@ -1,8 +1,27 @@
+/**
+ * Filens syfte:
+ *
+ * `LobbySidebar` visar information om en lobby och dess spelare.
+ * Den kan:
+ * - Visa lobbykod
+ * - Lista alla spelare i lobbyn med plats för tomma slots
+ * - Markera vem som är Host och vem som är "You" (jag själv)
+ * - Visa och hantera "Ready"-status (knapp för mig, status för andra)
+ *
+ * Props:
+ * - lobbyCode: sträng med lobbykod att visa
+ * - players: lista med spelare (PlayerDTO) från servern
+ * - myIdStr: mitt id som sträng för att känna igen "jag"
+ * - maxPlayers: max antal spelare (default 4)
+ * - onToggleReady: callback när jag klickar på "Ready"-knappen
+ */
+
 import { Card } from "../ui/Card";
 import { Divider } from "../ui/Divider";
 import type { PlayerDTO } from "../../types/types";
 
 // Färgtema per spelarslot (1–4)
+// Ger olika bakgrundsfärg och textfärg för varje plats
 const PLAYER_COLORS = [
   { bg: "#FDF6B2", text: "#92400E" },
   { bg: "#FFE5B4", text: "#92400E" },
@@ -26,11 +45,12 @@ export function LobbySidebar({
   maxPlayers = 4,
   onToggleReady,
 }: Props) {
-  // Skapa index [0..maxPlayers-1] för slots
+  // Skapa en array [0..maxPlayers-1] som används för att loopa ut slots
   const slots = Array.from({ length: maxPlayers }, (_, i) => i);
 
   return (
     <Card className="w-full">
+      {/* Rubrik och lobbykod */}
       <h2 className="text-lg font-semibold text-gray-900 mb-2">Lobby</h2>
       <p className="text-sm text-gray-600 mb-4">
         <span className="font-mono font-semibold">{lobbyCode || "—"}</span>
@@ -60,10 +80,10 @@ export function LobbySidebar({
                   style={{ backgroundColor: color.bg, color: color.text }}
                 >
                   <div className="flex items-center gap-2 w-full">
-                     {/* Namn */}
+                    {/* Spelarens namn */}
                     <span className="font-medium truncate">{p.playerName}</span>
 
-                    {/* Visa "Host"-badge om spelaren är värd */}
+                     {/* Host-badge om spelaren är värd */}
                     {p.isHost && (
                       <span
                         className="rounded-full px-2 py-0.5 text-xs"
@@ -77,7 +97,7 @@ export function LobbySidebar({
                       </span>
                     )}
 
-                    {/* Visa "You"-badge om spelaren är jag */}
+                    {/* You-badge om spelaren är jag */}
                     {isMe && (
                       <span
                         className="rounded-full px-2 py-0.5 text-xs"
