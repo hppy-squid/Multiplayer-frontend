@@ -21,10 +21,18 @@ export interface ApiQuestionOption {
 
 // Typ för ett korrekt svar från API:t
 export interface ApiCorrectAnswer {
+    correctAnswer: string;
+  question_id: number;
+}
+
+
+export interface CorrectAnswerVM {
   option_text: string;
 }
 
+
 // Hjälpfunktion: kollar om värdet är ett objekt (ej null)
+
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
@@ -36,7 +44,9 @@ function isApiQuestionOption(v: unknown): v is ApiQuestionOption {
 
 // Hjälpfunktion: kollar om ett värde är av typen ApiCorrectAnswer
 function isApiCorrectAnswer(v: unknown): v is ApiCorrectAnswer {
-  return isRecord(v) && typeof v.option_text === "string";
+  return isRecord(v) &&
+         typeof v.correctAnswer === "string" &&
+         typeof v.question_id === "number";
 }
 
 /**
@@ -56,20 +66,24 @@ export async function getQuestionAndOptions(questionId: number): Promise<ApiQues
   return json;
 }
 
-/**
- * Hämta rätt svar för ett givet id.
- * - Gör ett GET-anrop mot /correctAnswer
- * - Validerar att svaret är av typen ApiCorrectAnswer
- */
-export async function getCorrectAnswer(questionId: number): Promise<ApiCorrectAnswer> {
+
+// Hämta rätt svar för ett id, och validera svaret
+export async function getCorrectAnswer(questionId: number): Promise<CorrectAnswerVM> {
+
+
   const res = await fetch(`${BASE}/correctAnswer?question_id=${questionId}`);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const json: unknown = await res.json();
 
+  console.log("DEBUG correctAnswer payload:", json);
+
+
+
   // Säkerställ att objektet har rätt format
+
   if (!isApiCorrectAnswer(json)) {
     throw new Error("Felaktigt payloadformat från correctAnswer");
   }
-  return json;
+   return { option_text: json.correctAnswer };
 }
