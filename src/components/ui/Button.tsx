@@ -1,11 +1,21 @@
+/**
+ * Filens syfte:
+ *
+ * Denna fil innehåller en återanvändbar knappkomponent (`Button`) med Tailwind-stilar.
+ * - Bygger på vanliga `<button>`-egenskaper via Reacts `ButtonHTMLAttributes`.
+ * - Lägger till standardutseende (färg, padding, rundade hörn, font mm).
+ * - Har inbyggt stöd för `disabled` (automatisk gråning + blockerad hover/cursor).
+ * - Tillåter extra `className` för att utöka/ändra stilar.
+ */
 
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
 
+// Props: ärver alla vanliga button-attribut
 type Props = ButtonHTMLAttributes<HTMLButtonElement>;
 
 /**
- * Button - standardknapp med Tailwind-stilar.
- * Har inbyggt stöd för disabled.
+ * Button
+ * En bas-komponent för knappar med konsekvent styling.
  */
 export function Button({ className = "", children, ...rest }: PropsWithChildren<Props>) {
   return (
