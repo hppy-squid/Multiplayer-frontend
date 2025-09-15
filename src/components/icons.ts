@@ -1,9 +1,16 @@
-// Ändrade här till att importera ikoner istället för att kopiera. Då kan vi fylla på med fler ikoner här vid behov. 
+/**
+ * Filens syfte:
+ *
+ * Denna fil samlar ikoner som används i appen.
+ * - Importerar ikoner från Material UI Icons istället för att duplicera kod.
+ * - Gör det enkelt att lägga till fler ikoner på ett ställe.
+ * - Ger konsekvent användning av ikoner i hela projektet.
+ *
+ * Ikonerna hämtas från:
+ * https://mui.com/material-ui/material-icons/
+ */
 
-// Alla ikoner hämtade från Material UI Icons:
-// https://mui.com/material-ui/material-icons/
-
-
-export { default as GroupIcon } from "@mui/icons-material/Group"; // "group" (personer)
+// Exempel: "group"-ikonen (används för att representera personer/lobby)
+export { default as GroupIcon } from "@mui/icons-material/Group";
 
 

@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 
 export interface QuizTimerState {
@@ -10,6 +11,9 @@ declare global {
     interface Window {
         quizTimer?: QuizTimerState;
     }
+
+
+
 }
 
 export function QuizTime() {
