@@ -24,7 +24,13 @@ function shuffle<T>(array: T[]): T[] {
 /** ViewModel för en fråga */
 type QuestionVM = { text: string; options: string[] };
 
-export function Questions() {
+export type QuestionsProps = {
+  total?: number;
+  onProgressChange?: (answered: number, total: number) => void;
+  onComplete?: () => void;           
+};
+
+export function Questions({ total = 5, onProgressChange, onComplete }: QuestionsProps) {
   // State: kö av fråge-ID:n
   const [ids, setIds] = useState<number[]>([]);
   // State: nuvarande fråge-ID
@@ -34,6 +40,8 @@ export function Questions() {
   // UI-state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Hur många frågor har vi passerat/visat (0..total)
+  const [answered, setAnswered] = useState(0);
 
 
   useEffect(() => {
@@ -56,10 +64,13 @@ export function Questions() {
 
   useEffect(() => {
     const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
-    setIds(shuffle(numbers));
-  }, []);
+    const queue = shuffle(numbers).slice(0, Math.max(0, total));
+    setIds(queue);
+    setAnswered(0);
+    onProgressChange?.(0, total);
+  }, [total, onProgressChange]);
 
- // Sätt första fråge-ID när kön är laddad
+  // Sätt första fråge-ID när kön är laddad
   useEffect(() => {
     setCurrentId(ids.length > 0 ? ids[0] : null);
   }, [ids]);
@@ -109,13 +120,27 @@ export function Questions() {
 
    
     /** Visa nästa fråga i kön */
-    const nextQuestion = () => {
-      setIds(prev => {
-        const [, next, ...rest] = prev;
-        setCurrentId(next ?? null);
-        return [next!, ...rest].filter(v => v != null) as number[];
-      });
-    };
+  const nextQuestion = () => {
+    setIds((prev) => {
+      // Ta bort första, plocka ut nästa
+      const [, next, ...rest] = prev;
+
+      const newAnswered = answered + 1;
+      setAnswered(newAnswered);
+      onProgressChange?.(newAnswered, total);
+
+      if (next == null) {
+        // Inga fler frågor → runda slut
+        setCurrentId(null);
+        onComplete?.();
+        return [];
+      }
+
+      setCurrentId(next);
+      // Behåll nästa som första i kön
+      return [next, ...rest];
+    });
+  };
 
   return (
     <Card>

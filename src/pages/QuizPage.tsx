@@ -9,8 +9,8 @@
  * - Renderar: vänster (LobbySidebar), mitten (Quiz-kort med timer, progress, frågor).
  */
 
-import { useMemo } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { useMemo, useState, useRef, useCallback } from "react";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 
 import { Card } from "../components/ui/Card";
 import { QuizTime } from "../components/ui/QuizTime";
@@ -23,7 +23,7 @@ import { GroupIcon } from "../components/icons";
 
 // Typ för state som kan skickas med via navigate(...) från LobbyPage
 type NavState = {
-  initialPlayers?: ServerPlayer[]; 
+  initialPlayers?: ServerPlayer[];
   playerId?: number;
   playerName?: string;
   isHost?: boolean;
@@ -38,8 +38,8 @@ export function QuizPage() {
 
   // Bestäm mitt id som sträng: router state → session → local
   const myIdStr = (location.state?.playerId != null
-  ? String(location.state.playerId)
-  : sessionStorage.getItem("playerId") ?? localStorage.getItem("playerId") ?? "");
+    ? String(location.state.playerId)
+    : sessionStorage.getItem("playerId") ?? localStorage.getItem("playerId") ?? "");
 
   // Seed:a socket-hooken med initial snapshot om vi fick med det från navigate(...)
   const initialPlayers = location.state?.initialPlayers;
@@ -63,7 +63,26 @@ export function QuizPage() {
     publishReady?.(myIdNum, nextReady);
   };
 
-  // === Render ===
+  const navigate = useNavigate();
+  const didGoScoreboard = useRef(false);
+
+  // --- Progress: 5 frågor ---
+  const TOTAL_QUESTIONS = 5;
+  const [answered, setAnswered] = useState(0); // hur många frågor passerade
+  const progress = Math.round((answered / TOTAL_QUESTIONS) * 100); // 0% → 100%
+  const handleProgressChange = useCallback((count: number) => {
+  setAnswered(count);
+}, []);
+
+  const goToScoreboard = () => {
+    if (didGoScoreboard.current) return;
+    didGoScoreboard.current = true;
+    navigate(`/lobby/${lobbyCode}/scoreboard`, {
+      replace: true,
+      state: { lobbyCode, players, playerId: Number(myIdStr) }, 
+    });
+  };
+
   return (
     <div className="min-h-screen flex justify-center p-6 pt-8">
       <div className="flex items-start justify-center gap-6 w-full">
@@ -94,20 +113,32 @@ export function QuizPage() {
               <QuizTime />
             </div>
 
-            {/* Progress bar (placeholder 15%) */}
+            {/* Progress meta */}
+            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+              <span>Fråga {Math.min(answered + 1, TOTAL_QUESTIONS)}/{TOTAL_QUESTIONS}</span>
+              <span>{progress}%</span>
+            </div>
+
+            {/* Progress bar */}
             <div className="relative flex h-2 w-full overflow-hidden rounded-full bg-gray-200 mb-6">
               <div
                 role="progressbar"
-                aria-valuenow={15}
+                aria-valuenow={progress}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                style={{ width: "15%" }}
-                className="flex h-full bg-blue-500"
+                style={{ width: `${progress}%` }}
+                className="flex h-full bg-blue-500 transition-all"
               />
             </div>
 
-            {/* Frågor + svarsalternativ */}
-            <Questions />
+            {/* Frågor + svarsalternativ
+                Questions anropar onProgressChange(answeredCount, total)
+                när användaren går vidare till nästa fråga. */}
+            <Questions
+              total={TOTAL_QUESTIONS}
+              onProgressChange={handleProgressChange}
+              onComplete={goToScoreboard}
+            />
           </Card>
         </div>
 
