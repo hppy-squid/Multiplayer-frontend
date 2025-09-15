@@ -1,13 +1,22 @@
+/**
+ * Filens syfte:
+ *
+ * Denna fil innehåller `TextField`-komponenten.
+ * - En återanvändbar textinput med label.
+ * - Kan användas för olika typer av inmatning (namn, kod osv).
+ * - Ger konsekvent styling och tillgänglighet via label + id-koppling.
+ */
+
 import type { InputHTMLAttributes } from "react";
 
 type Props = {
-  id: string;
-  label: string;
+  id: string;   // unikt id för att koppla label → input
+  label: string; // text som visas ovanför inputfältet
 } & Omit<InputHTMLAttributes<HTMLInputElement>, "id">;
 
 /**
- * TextField - textinput med label.
- * Kan återanvändas för namn, kod osv.
+ * TextField
+ * En textinput med label och standardiserad styling.
  */
 export function TextField({
   id,
@@ -22,12 +31,15 @@ export function TextField({
 }: Props) {
   return (
     <div className="mb-4">
+      {/* Label kopplad till inputfältet */}
       <label
         className="block text-sm font-medium text-gray-800 mb-1"
         htmlFor={id}
       >
         {label}
       </label>
+
+      {/* Själva inputfältet */}
       <input
         id={id}
         type={type}

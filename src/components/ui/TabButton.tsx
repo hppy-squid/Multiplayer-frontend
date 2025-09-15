@@ -1,10 +1,19 @@
+/**
+ * Filens syfte:
+ *
+ * Denna fil innehåller `TabButton`-komponenten.
+ * - Används som en knapp i ett tabb-gränssnitt.
+ * - Har stöd för en `active`-prop som markerar vilken tabb som är vald.
+ * - Ger olika styling beroende på om tabben är aktiv eller inte.
+ */
+
 import type { ButtonHTMLAttributes, PropsWithChildren } from "react";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean };
 
 /**
- * TabButton - en enskild tabb.
- * active = true gör den markerad (vit bakgrund + border).
+ * TabButton
+ * En knapp som fungerar som en tabb i UI:t.
  */
 export function TabButton({ active = false, className = "", children, ...rest }: PropsWithChildren<Props>) {
   return (

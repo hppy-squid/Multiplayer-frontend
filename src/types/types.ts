@@ -1,17 +1,31 @@
+/**
+ * Filens syfte:
+ *
+ * Denna fil samlar alla typer som används i lobby- och spel-flödet.
+ * - Delar upp typer i tre kategorier:
+ *   1. Router state: data som skickas via `navigate` i React Router.
+ *   2. UI-typer: modeller anpassade för frontend-komponenterna.
+ *   3. Server-typer: exakt struktur på det backend skickar.
+ *
+ * Detta gör koden mer robust och tydlig, eftersom vi alltid vet
+ * vilken typ av data vi arbetar med i olika delar av appen.
+ */
+
+
 // --- Router state (det du skickar via navigate) ---
 export type LobbyLocationState = {
-  isHost?: boolean;
-  playerId?: number;
-  playerName?: string;
-  initialPlayers?: ServerPlayer[]; // refererar till typen nedan
-  gameState?: GameState;
+   isHost?: boolean;              // om användaren är värd
+  playerId?: number;             // spelarens id
+  playerName?: string;           // spelarens namn
+  initialPlayers?: ServerPlayer[]; // snapshot från servern
+  gameState?: GameState;         // nuvarande spelstatus
 };
 
 // --- UI-typer (vad komponenterna använder) ---
 export type GameState = "WAITING" | "IN_PROGRESS" | "IN_GAME" | "FINISHED";
 
 export type PlayerDTO = {
-  id: string;          // UI-id som string
+  id: string;          // id konverterat till string för UI
   playerName: string;
   score: number;
   isHost: boolean;
@@ -19,27 +33,26 @@ export type PlayerDTO = {
 };
 
 export type LobbyDTO = {
-  id: number | null;
-  lobbyCode: string;
-  // Dessa två finns inte alltid i backend—gör dem gärna optional:
-  maxPlayer?: number;
-  lock?: boolean;
-  gameState: GameState;
-  players: PlayerDTO[];
+   id: number | null;       // lobby-id (kan vara null om lobby stängs)
+  lobbyCode: string;       // lobbykoden
+  maxPlayer?: number;      // max antal spelare (optional i backend)
+  lock?: boolean;          // om lobbyn är låst (optional i backend)
+  gameState: GameState;    // status på spelet
+  players: PlayerDTO[];    // lista över spelare i lobbyn (UI-modell)
 };
 
 // --- Server-typer (exakt vad backend skickar) ---
 export type ServerPlayer = {
-  id: number;
+  id: number;               // numeriskt id från servern
   playerName: string;
   score: number;
   isHost: boolean;
-  ready?: boolean;
+  ready?: boolean;          // optional (kan saknas i vissa svar)
 };
 
 export type ServerLobbyDTO = {
-  id: number;
-  lobbyCode: string;
-  gameState: GameState;
-  players: ServerPlayer[];
+  id: number;              // lobby-id från servern
+  lobbyCode: string;       // lobbykoden
+  gameState: GameState;    // status på spelet
+  players: ServerPlayer[]; // lista över spelare från servern
 };

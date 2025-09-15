@@ -1,207 +1,91 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+/**
+ * Filens syfte:
+ *
+ * Denna sida hanterar:
+ * 1) Väntsida för en specifik lobby (/lobby/:code)
+ * 2) Start/Join-vy när man ännu inte är i en lobby (/lobby)
+ *
+ * Den:
+ * - Läser och persisterar spelaridentitet (playerId, playerName) från router state / storage.
+ * - Upprättar WebSocket via hooken `useLobbySocket` och visar spelare i `LobbySidebar`.
+ * - Navigerar automatiskt till spelet när servern signalerar IN_GAME via `useGameStartNavigation`.
+ * - Har actions för att skapa/join:a/lämna lobby samt toggla ready och starta spelet (host).
+ */
+
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { Card } from "../components/ui/Card";
-import { TabList } from "../components/ui/TabList";
-import { TabButton } from "../components/ui/TabButton";
-import { TextField } from "../components/ui/TextField";
 import { Button } from "../components/ui/Button";
 import { Divider } from "../components/ui/Divider";
 import { GroupIcon } from "../components/icons";
 
-import SockJS from "sockjs-client/dist/sockjs.js";
-import { Client } from "@stomp/stompjs";
-import type { IMessage } from "@stomp/stompjs";
-import { WS_BASE, APP, TOPIC } from "../ws/endpoints";
-import {
-  createLobby,
-  joinLobby,
-  isBackendConfigured,
-  leaveLobby
-} from "../api/lobby";
+import { createLobby, joinLobby, leaveLobby } from "../api/lobby";
 import { ensurePlayer } from "../api/ensurePlayer";
-import type {
-  PlayerDTO,
-  LobbyLocationState,
-  ServerPlayer,
-  GameState,
-} from "../types/types";
+
 import { LobbySidebar } from "../components/lobby/LobbySidebar";
+import { LobbyStartPanel } from "../components/lobby/LobbyStartPanel";
 
+import type { LobbyLocationState, ServerPlayer } from "../types/types";
+import { useLobbySocket } from "../hooks/useLobbySocket";
+import { useGameStartNavigation } from "../hooks/useGameStartNavigation";
+import { usePlayerIdentity } from "../hooks/usePlayerIdentity";
 
-// Sidan för att skapa/gå med i lobby + se väntrummet
 export default function LobbyPage() {
   const navigate = useNavigate();
-  const hasNavigatedRef = useRef(false); // förhindra dubbel-navigering vid WS-meddelanden
-
-  // Läser /lobby/:code → om code finns är vi i väntrummet ("waiting")
   const { code } = useParams<{ code: string }>();
   const location = useLocation() as { state?: LobbyLocationState };
 
-  // === Flagga för väntrum ===
+  // Är vi i väntsidan (har kod i URL)? Annars är vi i start/join-vyn
   const isWaiting = Boolean(code);
   const lobbyCode = useMemo(() => (code ?? "").toUpperCase(), [code]);
 
-  // === UI state (join/create) ===
+  // Hämtar spelarens identitet (id + namn) från router-state eller storage.
+  const { myIdNum, myIdStr, myName } = usePlayerIdentity(location.state);
+
+  // ===== WebSocket via hook (inkl. initial snapshot) =====
+  const initialPlayers = location.state?.initialPlayers as ServerPlayer[] | undefined;
+  const { players, gameState, amHost, publishReady, publishStart, stompRef } =
+    useLobbySocket(lobbyCode, myIdStr, initialPlayers);
+
+  // ===== Navigera till spelet när servern sätter IN_GAME =====
+  useGameStartNavigation(lobbyCode, {
+    gameState,
+    players,
+    myIdNum,
+    myName,
+    amHost,
+  });
+
+  // ===== UI state för start/join =====
   const [activeTab, setActiveTab] = useState<"join" | "create">("join");
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [codeInput, setCodeInput] = useState("");
 
-  // Städar kodfältet (tar bort mellanslag)
+  // Normalisera lobbykod (ta bort whitespace)
   const normalizedCode = useMemo(
     () => codeInput.replace(/\s+/g, "").trim(),
     [codeInput]
   );
+  const canJoin = !submitting && normalizedCode.length > 0;
 
-  // Dev-test utan backend (kan tas bort när backend alltid är på)
-  const TEST_CODE = (import.meta.env.VITE_TEST_LOBBY_CODE as string) || "123456";
-  const TEST_MODE = import.meta.env.DEV && !isBackendConfigured;
+  // Kan host starta spelet?
+  const MAX_PLAYERS = 4;
+  const readyCount = players.filter(p => p.ready).length;
+  const canStart =
+    amHost &&
+    gameState === "WAITING" &&
+    players.length === MAX_PLAYERS &&
+    readyCount === MAX_PLAYERS;
 
-  // När får man trycka "Join"?
-  const canJoin =
-    !submitting &&
-    (TEST_MODE ? normalizedCode === TEST_CODE : normalizedCode.length > 0);
-
-  // === Identitet (id/namn) ===
-  const navId = location.state?.playerId as number | undefined; // från ensurePlayer() via navigate state
-
-  const storedIdStr =
-    sessionStorage.getItem("playerId") ?? localStorage.getItem("playerId");
-  const storedId =
-    storedIdStr && /^\d+$/.test(storedIdStr) ? Number(storedIdStr) : undefined;
-
-  // Endast numeriskt playerId som backend känner till
-  const myIdNum: number | undefined = typeof navId === "number" ? navId : storedId;
-  const myIdStr = myIdNum !== undefined ? String(myIdNum) : "";
-
-  // Namn
-  const rawName =
-    location.state?.playerName ??
-    sessionStorage.getItem("playerName") ??
-    localStorage.getItem("playerName") ??
-    "";
-  const myName = String(rawName ?? "").trim() || "Player";
-
-
-  // Spara playerId/playerName i sessionStorage när vi säkert har dem
-  useEffect(() => {
-    if (typeof navId === "number") {
-      sessionStorage.setItem("playerId", String(navId));
-    }
-    if (myName) {
-      sessionStorage.setItem("playerName", myName);
-    }
-  }, [navId, myName]);
-
-  // === Spelarlistan som visas i UI ===
-  const [players, setPlayers] = useState<PlayerDTO[]>([]);
-
-  // Är jag host? (först från navigation state, annars från players-listan)
-  const amHost = useMemo(() => {
-    if (location.state?.isHost != null) return Boolean(location.state.isHost);
-    const me = players.find(p => String(p.id) === myIdStr);
-    return !!me?.isHost;
-  }, [location.state?.isHost, players, myIdStr]);
-
-  // Hjälp: mappa server-spelare -> UI-spelare
-  const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
-    arr.map((p) => ({
-      id: String(p.id),
-      playerName: p.playerName,
-      score: p.score,
-      isHost: p.isHost,
-      ready: !!p.ready,
-    }));
-
-  // Initial hydra: ta spelare direkt från navigate(..., { state.initialPlayers })
-  // Detta gör att listan syns direkt även om första WS-meddelandet dröjer
-  useEffect(() => {
-    if (!isWaiting) return;
-
-    const initial: ServerPlayer[] | undefined = location.state?.initialPlayers;
-    if (initial?.length) {
-      setPlayers(toUI(initial));
-      return;
-    }
-
-  }, [isWaiting, lobbyCode, isBackendConfigured, location.state]);
-
-  // === WebSocket/STOMP — lyssna på lobbyuppdateringar ===
-  const stompRef = useRef<Client | null>(null);
-
-  useEffect(() => {
-    if (!isWaiting || !isBackendConfigured) return;
-
-    // Skapa STOMP-klient som ansluter via SockJS till din backend (/ws)
-    const client = new Client({
-      webSocketFactory: () => new SockJS(WS_BASE),
-      reconnectDelay: 1000,
-      debug: (msg) => {
-        if (import.meta.env.DEV) console.log("[STOMP]", msg);
-      },
-    });
-
-    client.onConnect = () => {
-      // Prenumerera på lobby-topic → får nya spelarlisor vid join/leave/ready m.m.
-      client.subscribe(TOPIC.LOBBY(lobbyCode), (frame: IMessage) => {
-        const dto = JSON.parse(frame.body) as { players: ServerPlayer[]; gameState?: GameState };
-
-        // Uppdatera spelarlistan
-        const uiPlayers = toUI(dto.players);
-        setPlayers(uiPlayers);
-
-        // Uppdatera också om jag är host (kan ha ändrats)
-        const me = uiPlayers.find(p => String(p.id) === myIdStr);
-        const isHostNow = !!me?.isHost;
-
-        // 2) Om gameState ändrats till IN_GAME → navigera till QuizPage
-        if (dto.gameState === "IN_GAME" && !hasNavigatedRef.current) {
-          hasNavigatedRef.current = true;
-          navigate(`/game/${lobbyCode}`, {
-            state: {
-              initialPlayers: uiPlayers,   
-              playerId: myIdNum,
-              playerName: myName,
-              isHost: isHostNow,        
-            },
-          });
-        }
-      });
-
-      // (exempel) fler topics:
-      // client.subscribe(TOPIC.RESPONSE(lobbyCode), ...);
-      // client.subscribe(TOPIC.READY(lobbyCode), ...);
-    };
-
-    client.onStompError = (f) => {
-      console.error("Broker error:", f.headers["message"], f.body);
-    };
-
-    client.activate();
-    stompRef.current = client;
-
-    // Stäng anslutning när komponenten unmountas eller lobbyCode ändras
-    return () => {
-      client.deactivate();
-      stompRef.current = null;
-    };
-  }, [isWaiting, isBackendConfigured, lobbyCode]);
-
-
-  // === Actions ===
-
-  // Skapa lobby → backend returnerar hela lobbyn → navigera till väntrummet med initialPlayers
+  // ===== Actions =====
+  // Skapa lobby: säkerställ spelare → POST /lobby/create → navigera till /lobby/:code
   const handleCreate = async () => {
-    if (!isBackendConfigured || !name.trim() || submitting) return;
+    if (!name.trim() || submitting) return;
     setSubmitting(true);
     try {
-      // Säkerställ att det finns en spelare i backend
       const { playerId, playerName } = await ensurePlayer(name);
-
-      // Skapa lobby → får tillbaka spelarlisan (inkl. host)
       const dto = await createLobby({ playerId });
-
-      // Navigera till väntrummet och skicka med initialPlayers (hydra direkt)
       navigate(`/lobby/${dto.lobbyCode}`, {
         state: {
           isHost: true,
@@ -212,39 +96,25 @@ export default function LobbyPage() {
         },
       });
     } catch (err) {
-      console.error(err);
       alert(err instanceof Error ? err.message : "Okänt fel vid skapande av lobby");
     } finally {
       setSubmitting(false);
     }
   };
 
-
-  // Gå med i befintlig lobby
+  // Join lobby: säkerställ spelare → POST /lobby/join → navigera till /lobby/:code
   const handleJoin = async () => {
     if (!canJoin) return;
     setSubmitting(true);
     try {
       const { playerId, playerName } = await ensurePlayer(name);
-
-      // Dev-genväg: endast testkod när backend inte körs
-      if (TEST_MODE && normalizedCode === TEST_CODE) {
-        navigate(`/lobby/${TEST_CODE}`, {
-          state: { isHost: false, playerId, playerName },
-        });
-        return;
-      }
-
-      // Riktig join → backend returnerar hela lobbyn (inkl. nuvarande spelare)
       const dto = await joinLobby({ lobbyCode: normalizedCode, playerId });
-
-      // Navigera och skicka med initialPlayers för direkt visning
       navigate(`/lobby/${dto.lobbyCode}`, {
         state: {
           isHost: false,
           playerId,
           playerName,
-          initialPlayers: dto.players, // hydra direkt för att undvika WS-race
+          initialPlayers: dto.players,
           gameState: dto.gameState,
         },
       });
@@ -255,105 +125,58 @@ export default function LobbyPage() {
     }
   };
 
-  // Gå tillbaka till startsidan
+  // Lämna lobby: POST /lobby/leave → stäng WS → navigera hem
   const handleLeave = async () => {
-    // Om vi inte är i väntrummet eller backend saknas – bara gå hem
-    if (!isWaiting || !isBackendConfigured) {
-      // stäng ev. WS snyggt
-      if (stompRef.current) {
-        try { await stompRef.current.deactivate(); } catch {// ignore 
-        }
-        stompRef.current = null;
-      }
+    if (!isWaiting) {
       navigate("/", { replace: true });
       return;
     }
-    if (myIdNum === undefined) {            // guard
-      alert("Saknar giltigt playerId – skapa/gå med i en lobby först.");
+    if (myIdNum == null) {
+      alert("Saknar giltigt playerId.");
       return;
     }
-
     try {
-      // 1) Anropa backend (triggar broadcast till alla i lobbyn)
-      const dto = await leaveLobby({ lobbyCode, playerId: myIdNum });
-
-      // 2) Om lobbyn blev tom (servern kan returnera id=null) → gå hem
-      if (dto.id == null || dto.players.length === 0) {
-        if (stompRef.current) {
-          try { await stompRef.current.deactivate(); } catch {// ignore
-          }
-          stompRef.current = null;
-        }
-        navigate("/", { replace: true });
-        return;
-      }
-
-      // 3) Om lobbyn fortfarande finns: vi lämnar ändå sidan (du lämnar ju lobbyn)
-      if (stompRef.current) {
-        try { await stompRef.current.deactivate(); } catch {//ignore 
-        }
-        stompRef.current = null;
-      }
+      await leaveLobby({ lobbyCode, playerId: myIdNum });
+      await stompRef.current?.deactivate().catch(() => undefined);
       navigate("/", { replace: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : "Kunde inte lämna lobbyn");
     }
   };
 
-  // Starta spelet (just nu bara navigering — lägg WS publish här om backend stödjer)
+  // Host startar spelet → servern broadcastar IN_GAME → hooken navigerar
   const handleStart = () => {
-    if (!amHost) return;
-    if (myIdNum === undefined) {
-      alert("Saknar giltigt playerId.");
-      return;
-    }
-    // Publicera via WS
-    stompRef.current?.publish({
-      destination: APP.START(lobbyCode),
-      body: JSON.stringify({ playerId: myIdNum }),
-      headers: { "content-type": "application/json" },
-    });
-   
+    if (!amHost || myIdNum == null) return;
+    if (!canStart) return; // UI-säkerhet: skicka inte START om kraven inte är uppfyllda
+    publishStart(myIdNum); // servern broadcastar IN_GAME → hooken ovan navigerar
   };
 
-  // Toggle "ready" —  publicera via WS
+  // Toggle min Ready-status → invänta serverns snapshot
   const handleToggleReady = () => {
-    if (myIdNum === undefined) {
-      alert("Saknar giltigt playerId – skapa/gå med i en lobby först.");
-      return;
-    }
-    stompRef.current?.publish({
-      destination: APP.READY(lobbyCode),
-      body: JSON.stringify({ playerId: myIdNum, playerName: myName, ready: !isReady }),
-      headers: { "content-type": "application/json" },
-    });
-    setIsReady(p => !p);
+    if (myIdNum == null) return;
+    const me = players.find((p) => String(p.id) === myIdStr);
+    const next = !me?.ready;
+    publishReady(myIdNum, next); // vi väntar på serverns /lobby/{code}-snapshot
   };
 
-
-  const [isReady, setIsReady] = useState(false);
-
-
-
-  // === Väntrumsvy ===
+  // ===== Render =====
+  // Väntsida för specifik lobby
   if (isWaiting) {
-
     return (
       <div className="min-h-screen flex justify-center p-6 pt-8">
         <div className="flex items-start justify-center gap-6 w-full">
-
-          {/* Vänster: Lobby + players */}
+          {/* Vänster: spelare i lobbyn */}
           <div className="w-80 shrink-0">
             <LobbySidebar
               lobbyCode={lobbyCode}
               players={players}
               myIdStr={myIdStr}
               onToggleReady={handleToggleReady}
-              maxPlayers={4}
+              maxPlayers={MAX_PLAYERS}
             />
           </div>
-            
-          {/* Mitten: huvud-actions */}
+
+          {/* Mitten: huvudåtgärder (Start/Leave) */}
           <div className="self-start shrink-0">
             <Card className="w-[800px] h-[520px]">
               <div className="flex justify-center mb-4">
@@ -368,12 +191,23 @@ export default function LobbyPage() {
                   <Button
                     type="button"
                     onClick={handleStart}
-                    disabled={!amHost}
-                    title={amHost ? undefined : "Endast värden kan starta"}
                     className="w-full py-3 text-lg"
+                    title={
+                      !amHost
+                        ? "Endast värden kan starta"
+                        : players.length < MAX_PLAYERS
+                          ? `Väntar på spelare (${players.length}/${MAX_PLAYERS})`
+                          : readyCount < MAX_PLAYERS
+                            ? `Väntar på redo (${readyCount}/${MAX_PLAYERS})`
+                            : "Start Game"
+                    }
+                    disabled={!canStart}
                   >
-                    Start Game
+                    {canStart ? "Start Game" : `Waiting ${Math.min(players.length, readyCount)}/${MAX_PLAYERS}`}
                   </Button>
+                  <p className="mt-2 text-center text-sm text-gray-600">
+                    Players: {players.length}/{MAX_PLAYERS} • Ready: {readyCount}/{MAX_PLAYERS}
+                  </p>
                 </div>
 
                 <Divider />
@@ -384,115 +218,39 @@ export default function LobbyPage() {
                   </Button>
                 </div>
               </div>
-
-              {!isBackendConfigured && (
-                <>
-                  <Divider />
-                  <p className="mt-1 text-xs text-gray-500 text-center">
-                    Backend inte konfigurerad. Sätt <code>VITE_API_BASE</code> i din{" "}
-                    <code>.env</code>.
-                  </p>
-                </>
-              )}
             </Card>
           </div>
 
-          {/* Högerspacer för centrerad layout */}
+          {/* Högerspacer */}
           <div className="w-20 shrink-0" aria-hidden />
         </div>
       </div>
     );
   }
 
-
-
-  // === Start/Join-vy (innan man är i väntrummet) ===
+  // Start-/Join-vy (visas när ingen lobbykod finns i URL:en)
   return (
     <div className="min-h-screen flex justify-center p-6 pt-8">
       <Card className="w-[500px] h-[520px]">
         <div className="flex justify-center mb-4">
           <GroupIcon sx={{ fontSize: 56 }} className="text-gray-800" />
         </div>
-
         <h1 className="text-2xl font-bold text-center tracking-wider text-gray-900 mb-6">
           QUIZ GAME
         </h1>
 
-        <TabList>
-          <TabButton active={activeTab === "join"} onClick={() => setActiveTab("join")}>
-            <span className="mr-1">#</span> Join Lobby
-          </TabButton>
-          <TabButton active={activeTab === "create"} onClick={() => setActiveTab("create")}>
-            <span className="mr-1">+</span> Create Lobby
-          </TabButton>
-        </TabList>
-
-        <div>
-          <div className="mb-2">
-            <TextField
-              id="name"
-              label="Your Name"
-              placeholder="Enter your name"
-              value={name}
-              maxLength={24}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          {activeTab === "join" ? (
-            <div>
-              <TextField
-                id="code"
-                label="Lobby Code"
-                placeholder={TEST_MODE ? `ENTER ${TEST_CODE}` : "ENTER 6-DIGIT CODE"}
-                inputMode="numeric"
-                maxLength={6}
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value)}
-              />
-
-              {TEST_MODE && normalizedCode.length > 0 && normalizedCode !== TEST_CODE && (
-                <p className="text-xs text-amber-600">
-                  Under utveckling funkar endast koden <code>{TEST_CODE}</code>.
-                </p>
-              )}
-
-              <Button type="button" onClick={handleJoin} disabled={!canJoin}>
-                {submitting ? "Joining..." : (
-                  <>
-                    <span>#</span> Join Lobby
-                  </>
-                )}
-              </Button>
-
-              <Divider />
-            </div>
-          ) : (
-            <div>
-              {!isBackendConfigured && (
-                <p className="text-xs text-gray-500">
-                  Backend inte konfigurerad. Sätt <code>VITE_API_BASE</code> i din <code>.env</code>.
-                </p>
-              )}
-
-              <div className="mt-6">
-                <Button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={!isBackendConfigured || submitting || !name.trim()}
-                >
-                  {submitting ? "Creating..." : (
-                    <>
-                      <span>+</span> Create Lobby
-                    </>
-                  )}
-                </Button>
-              </div>
-
-              <Divider />
-            </div>
-          )}
-        </div>
+        <LobbyStartPanel
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          name={name}
+          onNameChange={setName}
+          codeInput={codeInput}
+          onCodeChange={setCodeInput}
+          submitting={submitting}
+          canJoin={canJoin}
+          onJoin={handleJoin}
+          onCreate={handleCreate}
+        />
       </Card>
     </div>
   );
