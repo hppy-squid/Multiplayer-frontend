@@ -69,6 +69,15 @@ export default function LobbyPage() {
   );
   const canJoin = !submitting && normalizedCode.length > 0;
 
+  // Kan host starta spelet?
+  const MAX_PLAYERS = 4;
+  const readyCount = players.filter(p => p.ready).length;
+  const canStart =
+    amHost &&
+    gameState === "WAITING" &&
+    players.length === MAX_PLAYERS &&
+    readyCount === MAX_PLAYERS;
+
   // ===== Actions =====
   // Skapa lobby: säkerställ spelare → POST /lobby/create → navigera till /lobby/:code
   const handleCreate = async () => {
@@ -138,6 +147,7 @@ export default function LobbyPage() {
   // Host startar spelet → servern broadcastar IN_GAME → hooken navigerar
   const handleStart = () => {
     if (!amHost || myIdNum == null) return;
+    if (!canStart) return; // UI-säkerhet: skicka inte START om kraven inte är uppfyllda
     publishStart(myIdNum); // servern broadcastar IN_GAME → hooken ovan navigerar
   };
 
@@ -155,14 +165,14 @@ export default function LobbyPage() {
     return (
       <div className="min-h-screen flex justify-center p-6 pt-8">
         <div className="flex items-start justify-center gap-6 w-full">
-           {/* Vänster: spelare i lobbyn */}
+          {/* Vänster: spelare i lobbyn */}
           <div className="w-80 shrink-0">
             <LobbySidebar
               lobbyCode={lobbyCode}
               players={players}
               myIdStr={myIdStr}
               onToggleReady={handleToggleReady}
-              maxPlayers={4}
+              maxPlayers={MAX_PLAYERS}
             />
           </div>
 
@@ -182,11 +192,22 @@ export default function LobbyPage() {
                     type="button"
                     onClick={handleStart}
                     className="w-full py-3 text-lg"
-                    title="Endast värden kan starta"
-                    disabled={!amHost}
+                    title={
+                      !amHost
+                        ? "Endast värden kan starta"
+                        : players.length < MAX_PLAYERS
+                          ? `Väntar på spelare (${players.length}/${MAX_PLAYERS})`
+                          : readyCount < MAX_PLAYERS
+                            ? `Väntar på redo (${readyCount}/${MAX_PLAYERS})`
+                            : "Start Game"
+                    }
+                    disabled={!canStart}
                   >
-                    Start Game
+                    {canStart ? "Start Game" : `Waiting ${Math.min(players.length, readyCount)}/${MAX_PLAYERS}`}
                   </Button>
+                  <p className="mt-2 text-center text-sm text-gray-600">
+                    Players: {players.length}/{MAX_PLAYERS} • Ready: {readyCount}/{MAX_PLAYERS}
+                  </p>
                 </div>
 
                 <Divider />
