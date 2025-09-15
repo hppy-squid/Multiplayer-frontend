@@ -12,7 +12,7 @@ import { Card } from "./Card";
 import { Button } from "./Button";
 import { Divider } from "./Divider";
 import { getCorrectAnswer, getQuestionAndOptions } from "../../api/QuestionsApi";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import type {QuizTimerState} from "./QuizTime.tsx";
 
 
@@ -23,67 +23,51 @@ function shuffle<T>(array: T[]): T[] {
   return [...array].sort(() => Math.random() - 0.5);
 }
 
+/** Typa window så vi slipper `any` */
+type WindowWithQuizTimer = Window & { quizTimer?: QuizTimerState };
+
 /** ViewModel för en fråga */
 type QuestionVM = { text: string; options: string[] };
-type CorrectAnswerVM = { option_text: string };
-
-
-
-
 
 export type QuestionsProps = {
+  /** Antal frågor i rundan (default 5) */
   total?: number;
+  /** Callback när progress ändras: (antal passerade, total) */
   onProgressChange?: (answered: number, total: number) => void;
-  onComplete?: () => void;           
+  /** Callback när rundan är klar */
+  onComplete?: () => void;
 };
 
 export function Questions({ total = 5, onProgressChange, onComplete }: QuestionsProps) {
-  // State: kö av fråge-ID:n
-
+  // --- State ---
   const [ids, setIds] = useState<number[]>([]);
-  // State: nuvarande fråge-ID
   const [currentId, setCurrentId] = useState<number | null>(null);
-  // State: nuvarande fråga
   const [question, setQuestion] = useState<QuestionVM | null>(null);
-  // UI-state
+  const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Hur många frågor har vi passerat/visat (0..total)
   const [answered, setAnswered] = useState(0);
 
-  const [guessed, setGuessed] = useState(false)
-  const [allGuessed, setAllGuessed] = useState(false);
+  // Val-/visningsstate
+  const [guessed, setGuessed] = useState(false);
   const [guessedOption, setGuessedOption] = useState<string | null>(null);
-    const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
 
+  // Lås som garanterar att vi bara avancerar EN gång per fråga (timer/knapp)
+  const advanceLockRef = useRef(false);
 
-
-  useEffect(() => {
-    const checkTimer = () => {
-      const timer: QuizTimerState | undefined = window.quizTimer;
-      if (timer) {
-        // Efter att resultatet för frågan har visats, gå till nästa fråga
-        if (timer.phase === 'question' && timer.timeLeft === 15) {
-          nextQuestion();
-        }
-      }
-    };
-
-    // Kolla varje sekund
-    const interval = setInterval(checkTimer, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Slumpa fram vilken fråga som visas
-
+  // --- Initiera kö och nollställ progress när `total` ändras ---
   useEffect(() => {
     const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
     const queue = shuffle(numbers).slice(0, Math.max(0, total));
     setIds(queue);
     setAnswered(0);
-    onProgressChange?.(0, total);
-  }, [total, onProgressChange]);
+  }, [total]);
+
+  // --- Rapportera progress separat (så vi inte nollställer oavsiktligt) ---
+  useEffect(() => {
+    onProgressChange?.(answered, total);
+  }, [answered, total, onProgressChange]);
 
   // Sätt första fråge-ID när kön är laddad
   useEffect(() => {
@@ -117,14 +101,20 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
         // Sätt frågetext och alternativ
         setQuestion({
           text: data[0].question ?? "Okänd fråga",
-          options: shuffle(data.map((d) => d.option_text).filter(Boolean)),
+          options: shuffle(data.map(d => d.option_text).filter(Boolean)),
         });
-           const correct = await getCorrectAnswer(currentId);
+
+        const correct = await getCorrectAnswer(currentId);
         if (!alive) return;
         setCorrectAnswer(correct.option_text);
+
+        // Ny fråga: lås upp avanceringslåset och nollställ val
+        advanceLockRef.current = false;
+        setGuessed(false);
+        setGuessedOption(null);
       } catch (e: unknown) {
-        if (!alive) return;   // undvik setState efter unmount
-        setError(e instanceof Error ? e.message ?? "Kunde inte hämta fråga." : "Kunde inte hämta fråga.");
+        if (!alive) return;
+        setError(e instanceof Error ? (e.message ?? "Kunde inte hämta fråga.") : "Kunde inte hämta fråga.");
         setQuestion(null);
       } finally {
         if (alive) setLoading(false);
@@ -136,50 +126,53 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
     };
   }, [currentId]);
 
+  // --- Nästa fråga: låst + clamp:a progress ---
+  const nextQuestion = useCallback(() => {
+    if (advanceLockRef.current) return;        // hindra dubbeltrigger
+    advanceLockRef.current = true;
 
-   
-    /** Visa nästa fråga i kön */
-  const nextQuestion = () => {
-    setIds((prev) => {
-      // Ta bort första, plocka ut nästa
+    setAnswered(a => Math.min(total, a + 1));  // clamp mot total
+
+    setIds(prev => {
       const [, next, ...rest] = prev;
 
-      const newAnswered = answered + 1;
-      setAnswered(newAnswered);
-      onProgressChange?.(newAnswered, total);
-
       if (next == null) {
-        // Inga fler frågor → runda slut
         setCurrentId(null);
         onComplete?.();
         return [];
       }
 
       setCurrentId(next);
-      // Behåll nästa som första i kön
       return [next, ...rest];
     });
-  };
+  }, [onComplete, total]);
 
+  // --- Auto-advance när frågetiden (eller svarstiden) tar slut ---
+  // OBS: matchar typningen "question" | "answer"
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const timer = (window as WindowWithQuizTimer).quizTimer;
+      if (!timer || advanceLockRef.current) return;
 
-   // Skicka gissning
-  // const handleGuess = (option: string) => {
-  //   setGuessed(true);
-  //   setGuessedOption(option);
-  // };
-  
-  //   // Visa nästa fråga i kön (eller tom
-  //   const nextQuestion = () => {
-  //   setIds(prev => prev.slice(1)); 
-  //   setCurrentId(ids[1] ?? null);  
-  //   setGuessed(false);
-  //   setAllGuessed(false);
-  //   setCorrectAnswer(null);
-  // };
-  
+      const isQuestionFinished = timer.phase === "question" && timer.timeLeft === 0;
+      const isAnswerFinished   = timer.phase === "answer"   && timer.timeLeft === 0;
 
+      if (isQuestionFinished || isAnswerFinished) {
+        nextQuestion(); // låsningen hanteras i nextQuestion
+      }
+    }, 250);
 
+    return () => clearInterval(interval);
+  }, [currentId, nextQuestion]);
 
+  // --- Val av svar ---
+  const handleGuess = useCallback((option: string) => {
+    setGuessed(true);
+    setGuessedOption(option);
+    // multiplayer: här kan man trigga WS “jag är klar”
+  }, []);
+
+  // --- Render ---
   return (
     <Card>
       {/* Laddningsvy */}
@@ -230,17 +223,14 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
             })}
           </ul>
 
-
-               {allGuessed && !correctAnswer && (
-        <div className="mt-4 text-blue-700 font-semibold text-center">
-          Väntar på rätt svar...
-        </div>
-      )}
-           {/* Divider */}
           <Divider className="my-6" />
 
           {/* Knapp för nästa fråga */}
-          <Button onClick={nextQuestion}  className="w-full">
+          <Button
+            onClick={nextQuestion}
+            disabled={advanceLockRef.current || loading}
+            className="w-full"
+          >
             Nästa Fråga
           </Button>
         </>
