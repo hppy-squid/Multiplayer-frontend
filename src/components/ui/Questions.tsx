@@ -11,18 +11,25 @@
 import { Card } from "./Card";
 import { Button } from "./Button";
 import { Divider } from "./Divider";
-import { getQuestionAndOptions } from "../../api/QuestionsApi";
+import { getCorrectAnswer, getQuestionAndOptions } from "../../api/QuestionsApi";
 import { useEffect, useState } from "react";
 import type {QuizTimerState} from "./QuizTime.tsx";
 
 
+
 /** Hjälpfunktion för att slumpa en array */
+
 function shuffle<T>(array: T[]): T[] {
   return [...array].sort(() => Math.random() - 0.5);
 }
 
 /** ViewModel för en fråga */
 type QuestionVM = { text: string; options: string[] };
+type CorrectAnswerVM = { option_text: string };
+
+
+
+
 
 export type QuestionsProps = {
   total?: number;
@@ -32,6 +39,7 @@ export type QuestionsProps = {
 
 export function Questions({ total = 5, onProgressChange, onComplete }: QuestionsProps) {
   // State: kö av fråge-ID:n
+
   const [ids, setIds] = useState<number[]>([]);
   // State: nuvarande fråge-ID
   const [currentId, setCurrentId] = useState<number | null>(null);
@@ -40,8 +48,15 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
   // UI-state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   // Hur många frågor har vi passerat/visat (0..total)
   const [answered, setAnswered] = useState(0);
+
+  const [guessed, setGuessed] = useState(false)
+  const [allGuessed, setAllGuessed] = useState(false);
+  const [guessedOption, setGuessedOption] = useState<string | null>(null);
+    const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
+
 
 
   useEffect(() => {
@@ -104,6 +119,9 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
           text: data[0].question ?? "Okänd fråga",
           options: shuffle(data.map((d) => d.option_text).filter(Boolean)),
         });
+           const correct = await getCorrectAnswer(currentId);
+        if (!alive) return;
+        setCorrectAnswer(correct.option_text);
       } catch (e: unknown) {
         if (!alive) return;   // undvik setState efter unmount
         setError(e instanceof Error ? e.message ?? "Kunde inte hämta fråga." : "Kunde inte hämta fråga.");
@@ -117,6 +135,7 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
       alive = false;
     };
   }, [currentId]);
+
 
    
     /** Visa nästa fråga i kön */
@@ -142,6 +161,25 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
     });
   };
 
+
+   // Skicka gissning
+  // const handleGuess = (option: string) => {
+  //   setGuessed(true);
+  //   setGuessedOption(option);
+  // };
+  
+  //   // Visa nästa fråga i kön (eller tom
+  //   const nextQuestion = () => {
+  //   setIds(prev => prev.slice(1)); 
+  //   setCurrentId(ids[1] ?? null);  
+  //   setGuessed(false);
+  //   setAllGuessed(false);
+  //   setCorrectAnswer(null);
+  // };
+  
+
+
+
   return (
     <Card>
       {/* Laddningsvy */}
@@ -165,11 +203,39 @@ export function Questions({ total = 5, onProgressChange, onComplete }: Questions
 
            {/*svarsalternativ */}
           <ul className="space-y-4">
-            {question.options.map((opt: string, index: number) => (
-              <li key={index}>{opt}</li>
-            ))}
+            {question.options.map((opt, index) => {
+              let className = "w-full";
+
+              if (guessed) {
+                if (opt === correctAnswer) {
+                  className += " bg-green-500 text-white"; // rätt svar
+                } else if (opt === guessedOption && opt !== correctAnswer) {
+                  className += " bg-red-500 text-white"; // fel gissning
+                } else {
+                  className += " bg-gray-200"; // övriga
+                }
+              }
+
+              return (
+                <li key={index}>
+                  <Button
+                    onClick={() => handleGuess(opt)}
+                    disabled={guessed}
+                    className={className}
+                  >
+                    {opt}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
 
+
+               {allGuessed && !correctAnswer && (
+        <div className="mt-4 text-blue-700 font-semibold text-center">
+          Väntar på rätt svar...
+        </div>
+      )}
            {/* Divider */}
           <Divider className="my-6" />
 
