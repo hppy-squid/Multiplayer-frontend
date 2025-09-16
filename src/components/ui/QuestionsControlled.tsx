@@ -92,11 +92,11 @@ export function QuestionsControlled({
         <Card>
             {/* Progress-rad */}
             <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                <span>Fråga {index + 1}/{total}</span>
-                {typeof answeredCount === "number" && <span>Svarade: {answeredCount}</span>}
+                <span>Question: {index + 1}/{total}</span>
+                {typeof answeredCount === "number" && <span>Answers: {answeredCount}</span>}
             </div>
 
-            {loading && <div>Laddar fråga…</div>}
+            {loading && <div>Loading question…</div>}
             {error && <div className="text-red-600">Fel: {error}</div>}
 
             {!loading && !error && vm && (
@@ -110,12 +110,12 @@ export function QuestionsControlled({
                             let className = "w-full";
 
                             if (phase === "answer") {
-                                if (opt === correct) className += " bg-green-500 text-white";
-                                else if (picked === opt && opt !== correct) className += " bg-red-500 text-white";
-                                else className += " bg-gray-200";
+                                if (opt === correct) className += "bg-green-500 text-white";
+                                else if (picked === opt && opt !== correct) className += "bg-red-500 text-white";
+                                else className += "bg-gray-200";
                             } else if (phase === "question" && picked === opt) {
                                 // Ovverride disabled-gråning: ! = important
-                                className += " !ring-2 !ring-blue-400 !bg-blue-50";
+                                className += "!ring-6 !ring-blue-600 !bg-black-50";
                             }
 
                             return (
@@ -132,9 +132,7 @@ export function QuestionsControlled({
                             );
                         })}
                     </ul>
-                    <div className="text-xs text-gray-500 mb-2">
-                        phase={phase} • isLocked={String(isLocked)}
-                    </div>
+                    
 
                     <Divider className="my-6" />
                     <div className="text-center text-sm text-gray-600">
@@ -142,14 +140,14 @@ export function QuestionsControlled({
                     </div>
                     {phase === "question" && picked && (
                         <div className="mt-3 text-center text-sm">
-                            Du valde: <strong>{picked}</strong>
+                            Your answer: <strong>{picked}</strong>
                         </div>
                     )}
                 </>
             )}
 
             {!loading && !error && !vm && (
-                <div className="text-center text-gray-600">Väntar på nästa fråga…</div>
+                <div className="text-center text-gray-600">Next question is on its way…</div>
             )}
         </Card>
     );
