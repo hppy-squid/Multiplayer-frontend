@@ -25,13 +25,16 @@ import { GroupIcon } from "../components/icons";
 import { useLobbySocket } from "../hooks/useLobbySocket";
 import type { PlayerDTO, ServerPlayer } from "../types/types";
 // import { WS_BASE, APP } from "../ws/endpoints";
-import { resetLobbyReady } from "../api/lobby";
+import { resetLobbyReady, leaveLobby } from "../api/lobby";
+import { usePlayerIdentity } from "../hooks/usePlayerIdentity";
+
 
 // Router-state som (valfritt) kan skickas hit från spelet
 type NavState = {
   lobbyCode?: string;
   players?: PlayerDTO[]; // används som seed om WS ej hunnit uppdatera
   playerId?: number;
+  initialPlayers?: ServerPlayer[]; // används vid navigation till lobbyn
 };
 
 
@@ -91,25 +94,14 @@ export function ScoreboardPage() {
 
   // ===== Actions =====
 
+
+// Reset allas ready i lobbyn, navigera sedan till lobbyn
   const handlePlayAgain = async () => {
-    if (!lobbyCode) {
-      navigate("/lobby");
-      return;
-    }
+    
+    const me = playersForUI.find(p => String(p.id) === myIdStr);
+    const isHost = me?.isHost;
 
-  try {
-    await resetLobbyReady(lobbyCode);   // måste lyckas
-  } catch (e) {
-    alert("Play Again misslyckades: " + (e instanceof Error ? e.message : String(e)));
-    return; // navigera inte om reset failade
-  }
-
-  // navigera tillbaka till lobbyn – WS-snapshot efter reset sätter rätt state
-  navigate(`/lobby/${lobbyCode}`, { replace: true, state: { playerId: Number(myIdStr) || undefined } });
-};
-
-  const handleBackToLobby = () => {
-    if (lobbyCode) {
+    if (!isHost) {
       navigate(`/lobby/${lobbyCode}`, {
         replace: true,
         state: {
@@ -117,8 +109,46 @@ export function ScoreboardPage() {
           playerId: Number(myIdStr) || undefined,
         },
       });
-    } else {
-      navigate("/lobby");
+      return;
+    }
+    
+    try {
+      await resetLobbyReady(lobbyCode);
+    } catch (e) {
+      alert("Play Again misslyckades: " + (e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    navigate(`/lobby/${lobbyCode}`, {
+      replace: true,
+      state: {
+        playerId: Number(myIdStr) || undefined,
+      },
+    });
+  };
+  
+
+  // Lämna lobbyn
+  const handleLeave = async () => {
+
+    const isWaiting = Boolean(code); 
+    const initialPlayers = location.state?.initialPlayers as ServerPlayer[] | undefined;
+    const { myIdNum, myIdStr } = usePlayerIdentity(location.state);
+    const {  stompRef } = useLobbySocket(lobbyCode, myIdStr, initialPlayers);
+    
+    if (!isWaiting) {
+      navigate("/", { replace: true });
+      return;
+    }
+    if (myIdNum == null) {
+      alert("Saknar giltigt playerId.");
+      return;
+    }
+    try {
+      await leaveLobby({ lobbyCode, playerId: myIdNum });
+      await stompRef.current?.deactivate().catch(() => undefined);
+      navigate("/", { replace: true });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Kunde inte lämna lobbyn");
     }
   };
 
@@ -216,8 +246,8 @@ export function ScoreboardPage() {
               <Button className="w-40" onClick={handlePlayAgain} disabled={!lobbyCode}>
                 Play Again
               </Button>
-              <Button className="w-40" onClick={handleBackToLobby}>
-                Back to Lobby
+              <Button className="w-40" onClick={handleLeave}>
+                Leave
               </Button>
             </div>
           </Card>
@@ -229,3 +259,5 @@ export function ScoreboardPage() {
     </div>
   );
 }
+
+
