@@ -20,74 +20,77 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import SockJS from "sockjs-client/dist/sockjs.js";
 import { Client, type IMessage } from "@stomp/stompjs";
 import { WS_BASE, APP, TOPIC } from "../ws/endpoints";
-import type { PlayerDTO, ServerPlayer, GameState } from "../types/types";
+import type { PlayerDTO, GameState, RoundState } from "../types/types";
 
-
-type Phase = "question" | "answer";
-
+/** Serverns PlayerWire enligt LobbySnapshotDTO (backend) */
 type ServerPlayerWire = {
-  id: number;
+  id: number | string;
   playerName: string;
-  isHost?: boolean;  // ibland kommer det som isHost
-  host?: boolean;    // ibland kommer det som host
+  isHost?: boolean;
+  host?: boolean;          // fallback om backend skulle heta "host"
   ready?: boolean;
   score?: number;
+  answered?: boolean;      // från backend
+  correct?: boolean | null;// från backend (true/false/null)
 };
 
-type RoundState = {
-  questionId: number;
-  index: number;            // 0-baserat
-  total: number;            // t.ex. 5
-  phase: Phase;             // "question" | "answer"
-  endsAt: number;           // epoch millis när fasen tar slut
-  answeredCount?: number;   // valfritt
+/** Serverns RoundDTO enligt LobbySnapshotDTO (backend) */
+type ServerRoundDTO = {
+  questionId: number | string;
+  index: number;
+  total: number;
+  phase: "question" | "answer";
+  endsAt: number | string;      // epoch millis
+  answeredCount?: number | null;
 };
 
-// Mapper: konvertera serverns spelarmodell → UI-modell
-const normalizePlayers = (arr: ServerPlayerWire[]) =>
-  arr.map(p => ({
-    id: p.id,
+/** Payload som kommer via /lobby/{code} */
+type SnapshotWire = {
+  players: ServerPlayerWire[];
+  gameState?: GameState;
+  round?: ServerRoundDTO | null;
+};
+
+/** Normalisera en spelare från backend → vår UI-typ */
+function normalizePlayer(p: ServerPlayerWire): PlayerDTO {
+  return {
+    id: Number(p.id),
     playerName: p.playerName,
-    isHost: Boolean(p.isHost ?? p.host),       // <-- nyckeln!
+    isHost: Boolean(p.isHost ?? p.host),
     ready: !!p.ready,
     score: typeof p.score === "number" ? p.score : 0,
-  }));
+    answered: !!p.answered,
+    correct: p.correct ?? null,
+  };
+}
 
-// Mapper: konvertera serverns spelarmodell → UI-modell
-const toUI = (arr: ServerPlayer[]) =>
-  arr.map(p => ({
-    id: String(p.id),
-    playerName: p.playerName,
-    score: p.score,
-    isHost: p.isHost,
-    ready: !!p.ready
-  }));
+/** Normalisera en lista (tål undefined/null) */
+function normalizePlayers(arr?: ServerPlayerWire[] | null): PlayerDTO[] {
+  return (arr ?? []).map(normalizePlayer);
+}
 
 export function useLobbySocket(
   lobbyCode: string,
   myIdStr: string,
-  initialPlayers?: ServerPlayer[] | ServerPlayerWire[]
+  initialPlayers?: ServerPlayerWire[] // kan komma från navigation state
 ) {
-  const [players, setPlayers] = useState<PlayerDTO[]>(() => {
-    if (!initialPlayers) return [];
-    return toUI(normalizePlayers(initialPlayers as ServerPlayerWire[]));
-  });
+  const [players, setPlayers] = useState<PlayerDTO[]>(
+    () => normalizePlayers(initialPlayers)
+  );
   const [gameState, setGameState] = useState<GameState | undefined>(undefined);
-
-  // NYTT: serverstyrd runda
   const [round, setRound] = useState<RoundState | null>(null);
 
   const stompRef = useRef<Client | null>(null);
 
+  // Seeda från initialPlayers om vi fått med oss snapshot vid navigering
   useEffect(() => {
-    if (!initialPlayers) return;
-    setPlayers(toUI(normalizePlayers(initialPlayers as ServerPlayerWire[])));
+    if (initialPlayers) setPlayers(normalizePlayers(initialPlayers));
   }, [initialPlayers]);
 
-  const amHost = useMemo(
-    () => players.some(p => p.isHost && String(p.id) === myIdStr),
-    [players, myIdStr]
-  );
+  const amHost = useMemo(() => {
+    const myIdNum = Number(myIdStr);
+    return players.some(p => p.isHost && p.id === myIdNum);
+  }, [players, myIdStr]);
 
   useEffect(() => {
     if (!lobbyCode) return;
@@ -99,25 +102,17 @@ export function useLobbySocket(
     });
 
     client.onConnect = () => {
+      // Lyssna på snapshotar för den här lobbyn
       client.subscribe(TOPIC.LOBBY(lobbyCode), (frame: IMessage) => {
-        if (import.meta.env.DEV) console.log("[WS] snapshot:", frame.body);
+        const dto = JSON.parse(frame.body) as SnapshotWire;
 
-        const dto = JSON.parse(frame.body) as {
-          players: ServerPlayerWire[];
-          gameState?: GameState;
-          round?: {
-            questionId: number;
-            index: number;
-            total: number;
-            phase: "question" | "answer";
-            endsAt: number;             // du HAR redan endsAt i backend
-            answeredCount?: number;
-          } | null;
-        };
+        // Players
+        setPlayers(normalizePlayers(dto.players));
 
-        setPlayers(toUI(normalizePlayers(dto.players || [])));
+        // GameState
         setGameState(dto.gameState);
 
+        // Round
         if (dto.round) {
           setRound({
             questionId: Number(dto.round.questionId),
@@ -125,13 +120,17 @@ export function useLobbySocket(
             total: Number(dto.round.total),
             phase: dto.round.phase === "answer" ? "answer" : "question",
             endsAt: Number(dto.round.endsAt),
-            answeredCount: typeof dto.round.answeredCount === "number" ? dto.round.answeredCount : undefined,
+            answeredCount:
+              typeof dto.round.answeredCount === "number" && !Number.isNaN(dto.round.answeredCount)
+                ? dto.round.answeredCount
+                : 0,
           });
         } else {
           setRound(null);
         }
       });
-      // <-- NYTT: be servern skicka aktuell snapshot igen
+
+      // Be servern skicka aktuell snapshot direkt
       client.publish({
         destination: APP.RESYNC(lobbyCode),
         body: "{}", // inget payload behövs
@@ -141,9 +140,14 @@ export function useLobbySocket(
 
     client.activate();
     stompRef.current = client;
-    return () => { client.deactivate(); stompRef.current = null; };
+
+    return () => {
+      client.deactivate();
+      stompRef.current = null;
+    };
   }, [lobbyCode]);
 
+  // Publicera "ready"
   const publishReady = (myIdNum: number, ready: boolean) =>
     stompRef.current?.publish({
       destination: APP.READY(lobbyCode),
@@ -151,6 +155,7 @@ export function useLobbySocket(
       headers: { "content-type": "application/json" },
     });
 
+  // Starta spelet
   const publishStart = (myIdNum: number) =>
     stompRef.current?.publish({
       destination: APP.START(lobbyCode),
@@ -158,7 +163,7 @@ export function useLobbySocket(
       headers: { "content-type": "application/json" },
     });
 
-  // NYTT: skicka spelarens svar
+  // Skicka svar
   const publishAnswer = (payload: { playerId: number; questionId: number; option: string }) =>
     stompRef.current?.publish({
       destination: APP.ANSWER(lobbyCode),

@@ -179,6 +179,7 @@ export default function LobbyPage() {
               myIdStr={myIdStr}
               onToggleReady={handleToggleReady}
               maxPlayers={MAX_PLAYERS}
+              statusMode="ready"   
             />
           </div>
 

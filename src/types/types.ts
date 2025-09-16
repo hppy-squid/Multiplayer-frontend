@@ -14,7 +14,7 @@
 
 // --- Router state (det du skickar via navigate) ---
 export type LobbyLocationState = {
-   isHost?: boolean;              // om användaren är värd
+  isHost?: boolean;              // om användaren är värd
   playerId?: number;             // spelarens id
   playerName?: string;           // spelarens namn
   initialPlayers?: ServerPlayer[]; // snapshot från servern
@@ -25,20 +25,23 @@ export type LobbyLocationState = {
 export type GameState = "WAITING" | "IN_PROGRESS" | "IN_GAME" | "FINISHED";
 
 export type PlayerDTO = {
-  id: string;          // id konverterat till string för UI
+  id: number;
   playerName: string;
   score: number;
-  isHost: boolean;
-  ready: boolean;
+  isHost?: boolean;
+  ready?: boolean;
+  answered?: boolean; 
+  correct?: boolean | null;
 };
 
 export type LobbyDTO = {
-   id: number | null;       // lobby-id (kan vara null om lobby stängs)
+  id: number | null;       // lobby-id (kan vara null om lobby stängs)
   lobbyCode: string;       // lobbykoden
   maxPlayer?: number;      // max antal spelare (optional i backend)
   lock?: boolean;          // om lobbyn är låst (optional i backend)
   gameState: GameState;    // status på spelet
   players: PlayerDTO[];    // lista över spelare i lobbyn (UI-modell)
+  answered?: boolean;
 };
 
 // --- Server-typer (exakt vad backend skickar) ---
@@ -48,6 +51,8 @@ export type ServerPlayer = {
   score: number;
   isHost: boolean;
   ready?: boolean;          // optional (kan saknas i vissa svar)
+  answered?: boolean; 
+  correct?: boolean | null;
 };
 
 export type ServerLobbyDTO = {
@@ -66,10 +71,24 @@ export type RoundState = {
   phase: RoundPhase;    // "question" | "answer"
   endsAt: number;       // epoch millis (serverns deadline)
   answeredCount: number;// hur många som har svarat
+  answersByPlayer?: Record<number, string>; 
 };
 
 export type LobbySnapshotDTO = {
   players: ServerPlayer[];
   gameState: GameState; // WAITING | IN_GAME | FINISHED
   round?: RoundState;   // finns bara när IN_GAME
+};
+
+export type Phase = "question" | "answer";
+
+export type ServerPlayerWire = {
+  id: number;
+  playerName: string;
+  isHost?: boolean;  
+  host?: boolean;    
+  ready?: boolean;
+  score?: number;
+  answered?: boolean;   
+   correct?: boolean | null;
 };
