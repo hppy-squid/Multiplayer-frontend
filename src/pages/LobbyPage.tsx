@@ -138,6 +138,12 @@ export default function LobbyPage() {
     try {
       await leaveLobby({ lobbyCode, playerId: myIdNum });
       await stompRef.current?.deactivate().catch(() => undefined);
+
+      sessionStorage.removeItem("serverPlayerId");
+      sessionStorage.removeItem("serverPlayerName");
+      sessionStorage.removeItem("playerId");
+      sessionStorage.removeItem("playerName");
+
       navigate("/", { replace: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : "Kunde inte lämna lobbyn");

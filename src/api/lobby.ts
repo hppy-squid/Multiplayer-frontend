@@ -1,13 +1,14 @@
 /**
  * Filens syfte:
- * 
+ *
  * Den här filen innehåller API-anrop för att hantera lobbys (spelsessioner).
  * Den kan:
  * - Skapa en ny lobby
  * - Gå med i en befintlig lobby
  * - Hämta en lobby via ID
  * - Lämna en lobby
- * 
+ * - Nollställa allas "ready" i en lobby
+ *
  * Filen har också hjälpfunktioner för att:
  * - Ge bättre felmeddelanden om anrop misslyckas
  */
@@ -129,5 +130,21 @@ export async function leaveLobby(params: { lobbyCode: string; playerId: number }
     players: Array<{ id: number; playerName: string; isHost: boolean; ready?: boolean; score?: number }>;
     gameState: string;
   };
+}
+
+/**
+ * Nollställer allas "ready" i lobbyn (server-side).
+ * Används t.ex. när man trycker "Play Again" på scoreboarden.
+ *
+ */
+export async function resetLobbyReady(lobbyCode: string): Promise<void> {
+  const res = await fetch(`${BASE}/lobby/${encodeURIComponent(lobbyCode)}/ready/reset`, {
+    method: "POST",
+    headers: { Accept: "application/json" }
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`Reset ready failed (${res.status}): ${t || res.statusText}`);
+  }
 }
 
