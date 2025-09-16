@@ -20,6 +20,7 @@ export const APP = {
   READY:    (code: string) => `/app/game/${code}/ready`,
   RESPONSE: (code: string) => `/app/game/${code}/response`,
   START:    (code: string) => `/app/game/${code}/start`, 
+  RESET_READY: (code: string) => `/app/lobby/${code}/resetReady`,
 };
 
 // Endpoints för att LYSSNA på serverns uppdateringar

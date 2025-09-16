@@ -22,6 +22,25 @@ import { Client, type IMessage } from "@stomp/stompjs";
 import { WS_BASE, APP, TOPIC } from "../ws/endpoints";
 import type { PlayerDTO, ServerPlayer, GameState } from "../types/types";
 
+// Wire-modell av serverns spelarmodell
+type ServerPlayerWire = {
+  id: number;
+  playerName: string;
+  isHost: boolean;
+  ready?: boolean;
+  score?: number;
+};
+
+// Mapper: konvertera serverns spelarmodell → UI-modell
+const normalizePlayers = (arr: ServerPlayerWire[]): ServerPlayer[] =>
+  arr.map(p => ({
+    id: p.id,
+    playerName: p.playerName,
+    isHost: !!p.isHost,
+    ready: !!p.ready,
+    score: typeof p.score === "number" ? p.score : 0,
+  }));
+
 // Mapper: konvertera serverns spelarmodell → UI-modell
 const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
   arr.map(p => ({
@@ -35,18 +54,24 @@ const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
 export function useLobbySocket(
   lobbyCode: string,              // lobbykod vi ansluter till
   myIdStr: string,                // mitt id som sträng (för amHost/You-markeringar)
-  initialPlayers?: ServerPlayer[] // ev. initial snapshot vid navigation (seed)
+  initialPlayers?: ServerPlayer[] | ServerPlayerWire[] // ev. initial snapshot vid navigation (seed)
 ) {
-  // UI-state: seed:a från initialPlayers direkt (om finns)
-  const [players, setPlayers] = useState<PlayerDTO[]>(
-    () => (initialPlayers ? toUI(initialPlayers) : [])
-  );
+  // UI-state
+  const [players, setPlayers] = useState<PlayerDTO[]>(() => {
+    if (!initialPlayers) return [];
+    const strict = normalizePlayers(initialPlayers as ServerPlayerWire[]);
+    return toUI(strict);
+  });
   const [gameState, setGameState] = useState<GameState | undefined>(undefined);
-  const stompRef = useRef<Client | null>(null);    // ref till STOMP-klient
+  const stompRef = useRef<Client | null>(null);
 
-  // Uppdatera om initialPlayers byts (t.ex. vid ny navigation med ny snapshot)
+
+
+  // Seed:a om initialPlayers ändras (t.ex. efter "Play Again" → navigate med state)
   useEffect(() => {
-    if (initialPlayers) setPlayers(toUI(initialPlayers));
+    if (!initialPlayers) return;
+    const strict = normalizePlayers(initialPlayers as ServerPlayerWire[]);
+    setPlayers(toUI(strict));
   }, [initialPlayers]);
 
   // Är jag host? (finns en spelare som är host och vars id matchar mig)
@@ -70,8 +95,9 @@ export function useLobbySocket(
     client.onConnect = () => {
       client.subscribe(TOPIC.LOBBY(lobbyCode), (frame: IMessage) => {
         // Servern pushar snapshot: { players, gameState? }
-        const dto = JSON.parse(frame.body) as { players: ServerPlayer[]; gameState?: GameState };
-        setPlayers(toUI(dto.players));
+        const dto = JSON.parse(frame.body) as { players: ServerPlayerWire[]; gameState?: GameState };
+        const strict = normalizePlayers(dto.players || []);
+        setPlayers(toUI(strict));
         setGameState(dto.gameState);
       });
     };

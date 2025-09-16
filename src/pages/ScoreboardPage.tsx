@@ -15,6 +15,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { LobbySidebar } from "../components/lobby/LobbySidebar";
 import { Button } from "../components/ui/Button";
 import type { PlayerDTO } from "../types/types";
+import { resetLobbyReady } from "../api/lobby";
 
 // Router-state som (valfritt) kan skickas hit från spelet
 type NavState = {
@@ -35,11 +36,35 @@ export function ScoreboardPage() {
   // Ingen "ready" på scoreboard → no-op
   const noop = () => {};
 
+  // Mapper: konvertera UI-modell → serverns spelarmodell
+  const toWirePlayers = (arr: PlayerDTO[]) =>
+    arr.map(p => ({
+      id: Number(p.id),
+      playerName: p.playerName,
+      isHost: !!p.isHost,
+      ready: false,                                
+      score: typeof p.score === "number" ? p.score : 0,
+    }));
+
+
   // Navigation för knappar
-  const handlePlayAgain = () => {
-    // T.ex. tillbaka till /lobby/:code där host kan starta nytt spel
-    if (lobbyCode) navigate(`/lobby/${lobbyCode}`);
-    else navigate("/lobby");
+  const handlePlayAgain = async () => {
+    if (!lobbyCode) { navigate("/lobby"); return; }
+
+    try {
+      await resetLobbyReady(lobbyCode);          
+    } catch (e) {
+      
+      console.warn(e);
+    }
+
+    navigate(`/lobby/${lobbyCode}`, {
+      replace: true,
+      state: {
+        initialPlayers: toWirePlayers(players),   
+        playerId: Number(myIdStr) || undefined,
+      },
+    });
   };
 
   const handleBackToLobby = () => {
@@ -66,10 +91,10 @@ export function ScoreboardPage() {
       {/* Åtgärder */}
       <div className="mt-8 flex gap-4">
         <Button className="w-full max-w-xs" onClick={handlePlayAgain}>
-          Spela igen
+          Play Again
         </Button>
         <Button className="w-full max-w-xs" onClick={handleBackToLobby}>
-          Tillbaka till lobbyn
+          Back to Lobby
         </Button>
       </div>
     </div>

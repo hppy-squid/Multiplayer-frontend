@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 
 import  LobbyPage from './pages/LobbyPage'
 import { QuizPage } from "./pages/QuizPage";
+import { ScoreboardPage } from "./pages/ScoreboardPage";
 
 
 function App() {
@@ -20,6 +21,9 @@ function App() {
 
       {/* sidan där quizet sker */}
       <Route path="/game/:code" element={<QuizPage />} />
+
+      {/* sidan som visar resultat efter en spelomgång */}
+    <Route path="/lobby/:code/scoreboard" element={<ScoreboardPage />} />
 
     </Routes>
   )
