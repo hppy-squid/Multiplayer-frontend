@@ -1,101 +1,230 @@
 /**
  * Filens syfte:
  *
- * Denna sida visar resultat (Scoreboard) efter en spelomgång.
- * - Ersätter tidigare `LobbyMembers` med den dynamiska `LobbySidebar`.
- * - Tar emot (valfritt) router state med lobbykod, spelare och mitt id.
- * - Visar två knappar: "Spela igen" och "Tillbaka till lobbyn".
+ * Visa resultat (Scoreboard) efter en spelomgång med samma layout som Lobby/Quiz:
+ * - Vänster: LobbySidebar med spelare
+ * - Mitten: Resultat-kort med poänglista
  *
- * Notis:
- * - `LobbySidebar` kräver props: lobbyCode, players, myIdStr, onToggleReady.
- * - På en scoreboard-vy behöver vi normalt inte ändra "ready", så vi skickar en no-op.
+ * Funktioner:
+ * - Prenumererar på lobbyn via useLobbySocket (seedas av initialPlayers via navigate-state)
+ * - Play Again: skickar WS /app/lobby/{code}/resetReady, seedar ready=false och navigerar till lobbyn
+ * - Back to Lobby: navigerar till lobbyn utan reset
  */
 
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useMemo } from "react";
+// import SockJS from "sockjs-client/dist/sockjs.js";
+// import { Client } from "@stomp/stompjs";
+
 import { LobbySidebar } from "../components/lobby/LobbySidebar";
+import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import type { PlayerDTO } from "../types/types";
+import { Divider } from "../components/ui/Divider";
+import { GroupIcon } from "../components/icons";
+
+import { useLobbySocket } from "../hooks/useLobbySocket";
+import type { PlayerDTO, ServerPlayer } from "../types/types";
+// import { WS_BASE, APP } from "../ws/endpoints";
 import { resetLobbyReady } from "../api/lobby";
 
 // Router-state som (valfritt) kan skickas hit från spelet
 type NavState = {
   lobbyCode?: string;
-  players?: PlayerDTO[];
+  players?: PlayerDTO[]; // används som seed om WS ej hunnit uppdatera
   playerId?: number;
 };
 
+
+/** UI→wire: mappa PlayerDTO till ServerPlayer (seed för LobbyPage efter navigation) */
+function dtoToWire(arr: PlayerDTO[]): ServerPlayer[] {
+  return arr.map((p) => ({
+    id: Number(p.id),
+    playerName: p.playerName,
+    isHost: !!p.isHost,
+    ready: false, // vid "Play Again" startar alla som not ready
+    score: typeof p.score === "number" ? p.score : 0,
+  }));
+}
+
 export function ScoreboardPage() {
   const navigate = useNavigate();
+  const { code } = useParams<{ code: string }>();
   const location = useLocation() as { state?: NavState };
 
-  // Plocka data från router state (fallbacks om inget skickats)
-  const lobbyCode = (location.state?.lobbyCode ?? "").toUpperCase();
-  const players: PlayerDTO[] = location.state?.players ?? [];
-  const myIdStr = location.state?.playerId != null ? String(location.state.playerId) : "";
+  // Lobbykod: föredra URL-param (t.ex. /scoreboard/:code), annars router-state
+  const lobbyCode = useMemo(
+    () => (code ?? location.state?.lobbyCode ?? "").toUpperCase(),
+    [code, location.state?.lobbyCode]
+  );
 
-  // Ingen "ready" på scoreboard → no-op
+  // Min id som sträng (för You/host-markeringar)
+  const myIdStr =
+    location.state?.playerId != null
+      ? String(location.state.playerId)
+      : sessionStorage.getItem("playerId") ?? localStorage.getItem("playerId") ?? "";
+
+  // Seed-a från router-state om vi fick med spelare från spelet
+  const initialPlayersSeed = useMemo(() => {
+    const seed = location.state?.players ?? [];
+    return dtoToWire(seed);
+  }, [location.state?.players]);
+
+  // Prenumerera på lobbyn (WS). Visa sidebar från live-data (fallback till seed om tomt).
+  const { players: livePlayers } = useLobbySocket(
+    lobbyCode,
+    myIdStr,
+    initialPlayersSeed
+  );
+
+  // Spelare att visa i UI (sidebar + resultattabell)
+  const playersForUI: PlayerDTO[] = livePlayers.length
+    ? livePlayers
+    : (location.state?.players ?? []);
+
+  // Sortera resultat (högst poäng först)
+  const sorted = [...playersForUI].sort(
+    (a, b) => (b.score ?? 0) - (a.score ?? 0)
+  );
+
+  const MAX_PLAYERS = 4;
   const noop = () => {};
 
-  // Mapper: konvertera UI-modell → serverns spelarmodell
-  const toWirePlayers = (arr: PlayerDTO[]) =>
-    arr.map(p => ({
-      id: Number(p.id),
-      playerName: p.playerName,
-      isHost: !!p.isHost,
-      ready: false,                                
-      score: typeof p.score === "number" ? p.score : 0,
-    }));
+  // ===== Actions =====
 
-
-  // Navigation för knappar
   const handlePlayAgain = async () => {
-    if (!lobbyCode) { navigate("/lobby"); return; }
-
-    try {
-      await resetLobbyReady(lobbyCode);          
-    } catch (e) {
-      
-      console.warn(e);
+    if (!lobbyCode) {
+      navigate("/lobby");
+      return;
     }
 
-    navigate(`/lobby/${lobbyCode}`, {
-      replace: true,
-      state: {
-        initialPlayers: toWirePlayers(players),   
-        playerId: Number(myIdStr) || undefined,
-      },
-    });
-  };
+  try {
+    await resetLobbyReady(lobbyCode);   // måste lyckas
+  } catch (e) {
+    alert("Play Again misslyckades: " + (e instanceof Error ? e.message : String(e)));
+    return; // navigera inte om reset failade
+  }
+
+  // navigera tillbaka till lobbyn – WS-snapshot efter reset sätter rätt state
+  navigate(`/lobby/${lobbyCode}`, { replace: true, state: { playerId: Number(myIdStr) || undefined } });
+};
 
   const handleBackToLobby = () => {
-    if (lobbyCode) navigate(`/lobby/${lobbyCode}`);
-    else navigate("/lobby");
+    if (lobbyCode) {
+      navigate(`/lobby/${lobbyCode}`, {
+        replace: true,
+        state: {
+          initialPlayers: dtoToWire(playersForUI),
+          playerId: Number(myIdStr) || undefined,
+        },
+      });
+    } else {
+      navigate("/lobby");
+    }
   };
 
+  // ===== Render =====
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-100 p-4">
-      {/* Titel */}
-      <h1 className="text-8xl font-bold mb-24">Scoreboard</h1>
+    <div className="min-h-screen flex justify-center p-6 pt-8">
+      <div className="flex items-start justify-center gap-6 w-full">
+        {/* Vänster: spelare */}
+        <div className="w-80 shrink-0">
+          <LobbySidebar
+            lobbyCode={lobbyCode}
+            players={playersForUI}
+            myIdStr={myIdStr}
+            onToggleReady={noop}
+            maxPlayers={MAX_PLAYERS}
+          />
+        </div>
 
-      {/* Spelare/resultat via LobbySidebar (ersätter LobbyMembers) */}
-      <div>
-        <LobbySidebar
-          lobbyCode={lobbyCode}
-          players={players}
-          myIdStr={myIdStr}
-          onToggleReady={noop}
-          maxPlayers={4}
-        />
-      </div>
+        {/* Mitten: Resultat-kort */}
+        <div className="self-start shrink-0">
+          <Card className="w-[800px]">
+            {/* Ikon/header */}
+            <div className="flex justify-center mb-4">
+              <GroupIcon sx={{ fontSize: 56 }} className="text-gray-800" />
+            </div>
 
-      {/* Åtgärder */}
-      <div className="mt-8 flex gap-4">
-        <Button className="w-full max-w-xs" onClick={handlePlayAgain}>
-          Play Again
-        </Button>
-        <Button className="w-full max-w-xs" onClick={handleBackToLobby}>
-          Back to Lobby
-        </Button>
+            <h1 className="text-3xl font-bold text-center tracking-wider text-gray-900 mb-6">
+              SCOREBOARD
+            </h1>
+
+            {/* Topplista */}
+            <div className="mb-4">
+              {sorted.length === 0 ? (
+                <p className="text-center text-gray-600">
+                  Inga resultat att visa ännu.
+                </p>
+              ) : (
+                <ul className="divide-y rounded-xl border bg-white">
+                  {sorted.map((p, i) => {
+                    const rank = i + 1;
+                    const isMe = String(p.id) === myIdStr;
+                    const badge =
+                      rank === 1
+                        ? "bg-yellow-200 text-yellow-900"
+                        : rank === 2
+                        ? "bg-gray-200 text-gray-700"
+                        : rank === 3
+                        ? "bg-orange-200 text-orange-900"
+                        : "bg-gray-100 text-gray-700";
+                    return (
+                      <li
+                        key={`${p.id}-${i}`}
+                        className="flex items-center justify-between px-4 py-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span
+                            className={`inline-flex w-7 h-7 items-center justify-center rounded-full text-sm font-semibold ${badge}`}
+                            aria-label={`Placering ${rank}`}
+                          >
+                            {rank}
+                          </span>
+                          <span className={`truncate font-medium ${isMe ? "underline" : ""}`}>
+                            {p.playerName}
+                          </span>
+                          {p.isHost && (
+                            <span className="text-xs px-2 py-0.5 rounded-full border border-gray-300 text-gray-700">
+                              Host
+                            </span>
+                          )}
+                          {isMe && (
+                            <span className="text-xs px-2 py-0.5 rounded-full border border-blue-300 text-blue-700">
+                              You
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-lg font-semibold tabular-nums">
+                            {p.score ?? 0}
+                          </span>
+                          <span className="ml-1 text-sm text-gray-600">pts</span>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <Divider className="my-6" />
+
+            {/* Åtgärder */}
+            <div className="mb-4 flex items-center justify-center gap-4">
+              <Button className="w-40" onClick={handlePlayAgain} disabled={!lobbyCode}>
+                Play Again
+              </Button>
+              <Button className="w-40" onClick={handleBackToLobby}>
+                Back to Lobby
+              </Button>
+            </div>
+          </Card>
+        </div>
+
+        {/* Högerspacer */}
+        <div className="w-20 shrink-0" aria-hidden />
       </div>
     </div>
   );

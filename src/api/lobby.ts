@@ -140,7 +140,7 @@ export async function leaveLobby(params: { lobbyCode: string; playerId: number }
 export async function resetLobbyReady(lobbyCode: string): Promise<void> {
   const res = await fetch(`/api/lobby/${encodeURIComponent(lobbyCode)}/ready/reset`, {
     method: "POST",
-    headers: { "Accept": "application/json" },
+    headers: { Accept: "application/json" },
     credentials: "include",
   });
   if (!res.ok) {

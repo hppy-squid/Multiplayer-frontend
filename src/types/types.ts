@@ -56,3 +56,20 @@ export type ServerLobbyDTO = {
   gameState: GameState;    // status på spelet
   players: ServerPlayer[]; // lista över spelare från servern
 };
+
+export type RoundPhase = "question" | "answer";
+
+export type RoundState = {
+  index: number;        // 0..total-1
+  total: number;        // t.ex. 5
+  questionId: number;   // den fråga alla ska se
+  phase: RoundPhase;    // "question" | "answer"
+  endsAt: number;       // epoch millis (serverns deadline)
+  answeredCount: number;// hur många som har svarat
+};
+
+export type LobbySnapshotDTO = {
+  players: ServerPlayer[];
+  gameState: GameState; // WAITING | IN_GAME | FINISHED
+  round?: RoundState;   // finns bara när IN_GAME
+};
