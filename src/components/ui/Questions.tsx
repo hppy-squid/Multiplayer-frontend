@@ -182,12 +182,12 @@ function QuestionsLocal({
   const advanceLockRef = useRef(false);
 
   // Initiera kö + progress
-  useEffect(() => {
-    const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
-    console.log('Listan av nummer att fetcha, från första useEffect' + numbers);
-    setIds(shuffle(numbers).slice(0, Math.max(0, total)));
-    setAnswered(0);
-  }, [total]);
+  // useEffect(() => {
+  //   const numbers = Array.from({length: 50}, (_, i) => i + 1);
+  //   console.log('Listan av nummer att fetcha, från första useEffect' + numbers);
+  //   setIds(shuffle(numbers).slice(0, Math.max(0, total)));
+  //   setAnswered(0);
+  // }, [total]);
 
   // Rapportera progress
   useEffect(() => {
@@ -201,6 +201,7 @@ function QuestionsLocal({
       //Roterar arrayen baserat på offset
       const rotated = [...numbers.slice(offset), ...numbers.slice(0, offset)];
       setIds(rotated);
+      setAnswered(0);
     }
 
 
@@ -223,6 +224,7 @@ function QuestionsLocal({
         setError(null);
 
         const data = await getQuestionAndOptions(currentId);
+        console.log(data);
         if (!alive) return;
 
         if (!Array.isArray(data) || data.length === 0) {
