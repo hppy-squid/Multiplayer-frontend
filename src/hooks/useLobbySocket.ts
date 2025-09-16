@@ -22,8 +22,39 @@ import { Client, type IMessage } from "@stomp/stompjs";
 import { WS_BASE, APP, TOPIC } from "../ws/endpoints";
 import type { PlayerDTO, ServerPlayer, GameState } from "../types/types";
 
+
+type Phase = "question" | "answer";
+
+type ServerPlayerWire = {
+  id: number;
+  playerName: string;
+  isHost?: boolean;  // ibland kommer det som isHost
+  host?: boolean;    // ibland kommer det som host
+  ready?: boolean;
+  score?: number;
+};
+
+type RoundState = {
+  questionId: number;
+  index: number;            // 0-baserat
+  total: number;            // t.ex. 5
+  phase: Phase;             // "question" | "answer"
+  endsAt: number;           // epoch millis när fasen tar slut
+  answeredCount?: number;   // valfritt
+};
+
 // Mapper: konvertera serverns spelarmodell → UI-modell
-const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
+const normalizePlayers = (arr: ServerPlayerWire[]) =>
+  arr.map(p => ({
+    id: p.id,
+    playerName: p.playerName,
+    isHost: Boolean(p.isHost ?? p.host),       // <-- nyckeln!
+    ready: !!p.ready,
+    score: typeof p.score === "number" ? p.score : 0,
+  }));
+
+// Mapper: konvertera serverns spelarmodell → UI-modell
+const toUI = (arr: ServerPlayer[]) =>
   arr.map(p => ({
     id: String(p.id),
     playerName: p.playerName,
@@ -33,56 +64,86 @@ const toUI = (arr: ServerPlayer[]): PlayerDTO[] =>
   }));
 
 export function useLobbySocket(
-  lobbyCode: string,              // lobbykod vi ansluter till
-  myIdStr: string,                // mitt id som sträng (för amHost/You-markeringar)
-  initialPlayers?: ServerPlayer[] // ev. initial snapshot vid navigation (seed)
+  lobbyCode: string,
+  myIdStr: string,
+  initialPlayers?: ServerPlayer[] | ServerPlayerWire[]
 ) {
-  // UI-state: seed:a från initialPlayers direkt (om finns)
-  const [players, setPlayers] = useState<PlayerDTO[]>(
-    () => (initialPlayers ? toUI(initialPlayers) : [])
-  );
+  const [players, setPlayers] = useState<PlayerDTO[]>(() => {
+    if (!initialPlayers) return [];
+    return toUI(normalizePlayers(initialPlayers as ServerPlayerWire[]));
+  });
   const [gameState, setGameState] = useState<GameState | undefined>(undefined);
-  const stompRef = useRef<Client | null>(null);    // ref till STOMP-klient
 
-  // Uppdatera om initialPlayers byts (t.ex. vid ny navigation med ny snapshot)
+  // NYTT: serverstyrd runda
+  const [round, setRound] = useState<RoundState | null>(null);
+
+  const stompRef = useRef<Client | null>(null);
+
   useEffect(() => {
-    if (initialPlayers) setPlayers(toUI(initialPlayers));
+    if (!initialPlayers) return;
+    setPlayers(toUI(normalizePlayers(initialPlayers as ServerPlayerWire[])));
   }, [initialPlayers]);
 
-  // Är jag host? (finns en spelare som är host och vars id matchar mig)
   const amHost = useMemo(
     () => players.some(p => p.isHost && String(p.id) === myIdStr),
     [players, myIdStr]
   );
 
-  // Skapa och anslut STOMP-klienten för denna lobby
   useEffect(() => {
     if (!lobbyCode) return;
 
-    // Skapa STOMP-klient över SockJS
     const client = new Client({
-      webSocketFactory: () => new SockJS(WS_BASE),          // endpoint för WS
-      reconnectDelay: 1000,                                 // auto-reconnect efter 1s
-      debug: (m) => import.meta.env.DEV && console.log("[STOMP]", m),   // logga i dev
+      webSocketFactory: () => new SockJS(WS_BASE),
+      reconnectDelay: 1000,
+      debug: (m) => import.meta.env.DEV && console.log("[STOMP]", m),
     });
 
-    // När anslutningen är uppe: prenumerera på lobby-topic
     client.onConnect = () => {
       client.subscribe(TOPIC.LOBBY(lobbyCode), (frame: IMessage) => {
-        // Servern pushar snapshot: { players, gameState? }
-        const dto = JSON.parse(frame.body) as { players: ServerPlayer[]; gameState?: GameState };
-        setPlayers(toUI(dto.players));
+        if (import.meta.env.DEV) console.log("[WS] snapshot:", frame.body);
+
+        const dto = JSON.parse(frame.body) as {
+          players: ServerPlayerWire[];
+          gameState?: GameState;
+          round?: {
+            questionId: number;
+            index: number;
+            total: number;
+            phase: "question" | "answer";
+            endsAt: number;             // du HAR redan endsAt i backend
+            answeredCount?: number;
+          } | null;
+        };
+
+        setPlayers(toUI(normalizePlayers(dto.players || [])));
         setGameState(dto.gameState);
+
+        if (dto.round) {
+          setRound({
+            questionId: Number(dto.round.questionId),
+            index: Number(dto.round.index),
+            total: Number(dto.round.total),
+            phase: dto.round.phase === "answer" ? "answer" : "question",
+            endsAt: Number(dto.round.endsAt),
+            answeredCount: typeof dto.round.answeredCount === "number" ? dto.round.answeredCount : undefined,
+          });
+        } else {
+          setRound(null);
+        }
+      });
+      // <-- NYTT: be servern skicka aktuell snapshot igen
+      client.publish({
+        destination: APP.RESYNC(lobbyCode),
+        body: "{}", // inget payload behövs
+        headers: { "content-type": "application/json" },
       });
     };
-    client.activate();          // starta anslutningen
-    stompRef.current = client;  // spara ref för senare
 
-    // Städa upp vid unmount/byte av lobbyCode
+    client.activate();
+    stompRef.current = client;
     return () => { client.deactivate(); stompRef.current = null; };
   }, [lobbyCode]);
 
-  // Publicera min ready-status till servern
   const publishReady = (myIdNum: number, ready: boolean) =>
     stompRef.current?.publish({
       destination: APP.READY(lobbyCode),
@@ -90,7 +151,6 @@ export function useLobbySocket(
       headers: { "content-type": "application/json" },
     });
 
-  // Be servern starta spelet (endast host bör kalla denna)
   const publishStart = (myIdNum: number) =>
     stompRef.current?.publish({
       destination: APP.START(lobbyCode),
@@ -98,5 +158,13 @@ export function useLobbySocket(
       headers: { "content-type": "application/json" },
     });
 
-  return { players, gameState, amHost, publishReady, publishStart, stompRef };
+  // NYTT: skicka spelarens svar
+  const publishAnswer = (payload: { playerId: number; questionId: number; option: string }) =>
+    stompRef.current?.publish({
+      destination: APP.ANSWER(lobbyCode),
+      body: JSON.stringify(payload),
+      headers: { "content-type": "application/json" },
+    });
+
+  return { players, gameState, round, amHost, publishReady, publishStart, publishAnswer, stompRef };
 }
