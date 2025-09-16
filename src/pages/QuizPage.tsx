@@ -29,8 +29,8 @@ export function QuizPage() {
     location.state?.playerId != null
       ? String(location.state.playerId)
       : sessionStorage.getItem("playerId") ??
-        localStorage.getItem("playerId") ??
-        "";
+      localStorage.getItem("playerId") ??
+      "";
 
   const initialPlayers = location.state?.initialPlayers;
 
@@ -39,8 +39,8 @@ export function QuizPage() {
     myIdStr,
     initialPlayers
   );
-  
 
+ 
   const handleAnswer = useCallback(
     (opt: string) => {
       console.log("badabing bada boom");
@@ -65,6 +65,11 @@ export function QuizPage() {
     }
   }, [gameState, lobbyCode, navigate, players, myIdStr]);
 
+  useEffect(() => {
+    // nollställ när det blir ny fråga (eller när phase går tillbaka till "question")
+    // setIAnswered(false);
+  }, [round?.questionId, round?.phase]);
+
   // progress → fyller frågan först i reveal-fasen
   const progressPct = (() => {
     if (!round) return 0;
@@ -85,6 +90,7 @@ export function QuizPage() {
             myIdStr={myIdStr}
             onToggleReady={noop}
             maxPlayers={4}
+            statusMode="answered"           
           />
         </div>
 
@@ -131,7 +137,7 @@ export function QuizPage() {
                 total={round.total}
                 phase={round.phase}
                 onAnswer={handleAnswer}
-                // answeredCount={round.answeredCount}
+              // answeredCount={round.answeredCount}
               />
             ) : (
               <div className="text-center text-gray-600">Next question is on its way…</div>

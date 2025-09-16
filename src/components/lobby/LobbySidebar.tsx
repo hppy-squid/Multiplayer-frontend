@@ -31,11 +31,12 @@ const PLAYER_COLORS = [
 
 // Inparametrar till sidebaren
 type Props = {
-  lobbyCode: string;            // lobbykod att visa
+  lobbyCode: string;            // lobbykod att visa  
   players: PlayerDTO[];         // lista med spelare (från servern)
   myIdStr: string;              // mitt id som sträng (för att känna igen "jag")
-  maxPlayers?: number;          // max antal platser (default 4)          
-  onToggleReady: () => void;    // klick på Ready för mig      
+  maxPlayers?: number;          // max antal platser (default 4)
+  onToggleReady: () => void;    // klick på Ready för mig 
+  statusMode?: "ready" | "answered";
 };
 
 export function LobbySidebar({
@@ -44,6 +45,7 @@ export function LobbySidebar({
   myIdStr,
   maxPlayers = 4,
   onToggleReady,
+  statusMode = "ready",
 }: Props) {
   // Skapa en array [0..maxPlayers-1] som används för att loopa ut slots
   const slots = Array.from({ length: maxPlayers }, (_, i) => i);
@@ -69,105 +71,131 @@ export function LobbySidebar({
             const p = players[i];
             const color = PLAYER_COLORS[i];
 
-            if (p) {
-              const isMe = String(p.id) === myIdStr;    // är detta jag?
-
-
+            if (!p) {
               return (
                 <div
-                  key={`${p.id}-${i}`}
-                  className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
-                  style={{ backgroundColor: color.bg, color: color.text }}
+                  key={`slot-${i}`}
+                  className="flex items-center justify-start rounded-lg border border-dashed bg-gray-50 px-3 py-2 text-gray-400"
                 >
-                  <div className="flex items-center gap-2 w-full">
-                    {/* Spelarens namn */}
-                    <span className="font-medium truncate">{p.playerName}</span>
-
-                     {/* Host-badge om spelaren är värd */}
-                    {p.isHost && (
-                      <span
-                        className="rounded-full px-2 py-0.5 text-xs"
-                        style={{
-                          backgroundColor: "rgba(255,255,255,0.6)",
-                          color: color.text,
-                          border: `1px solid ${color.text}`,
-                        }}
-                      >
-                        Host
-                      </span>
-                    )}
-
-                    {/* You-badge om spelaren är jag */}
-                    {isMe && (
-                      <span
-                        className="rounded-full px-2 py-0.5 text-xs"
-                        style={{
-                          backgroundColor: "rgba(255,255,255,0.6)",
-                          color: color.text,
-                          border: `1px solid ${color.text}`,
-                        }}
-                      >
-                        You
-                      </span>
-                    )}
-
-                    {/* Ready UI: jag får knapp, andra ser status */}
-                    <div className="ml-auto">
-                      {isMe ? (
-                        <button
-                          type="button"
-                          onClick={onToggleReady}
-                          aria-pressed={p.ready}
-                          className="rounded-full px-2 py-0.5 text-xs transition-colors"
-                          style={
-                            p.ready
-                              ? {
-                                  backgroundColor: "hsl(140, 60%, 90%)",
-                                  color: "hsl(140, 30%, 25%)",
-                                  border: "1px solid hsl(140, 40%, 65%)",
-                                }
-                              : {
-                                  backgroundColor: "hsl(0, 0%, 95%)",
-                                  color: "hsl(0, 0%, 30%)",
-                                  border: "1px solid hsl(0, 0%, 75%)",
-                                }
-                          }
-                        >
-                          {p.ready ? "Ready!" : "Ready?"}
-                        </button>
-                      ) : (
-                        <span
-                          className="rounded-full px-2 py-0.5 text-xs"
-                          style={
-                            p.ready
-                              ? {
-                                  backgroundColor: "hsl(140, 60%, 90%)",
-                                  color: "hsl(140, 30%, 25%)",
-                                  border: "1px solid hsl(140, 40%, 65%)",
-                                }
-                              : {
-                                  backgroundColor: "hsl(0, 0%, 95%)",
-                                  color: "hsl(0, 0%, 30%)",
-                                  border: "1px solid hsl(0, 0%, 75%)",
-                                }
-                          }
-                        >
-                          {p.ready ? "Ready" : "Not ready"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <span className="font-medium">{`Player ${i + 1}`}</span>
                 </div>
               );
             }
 
-            // Tom slot (ingen spelare på platsen ännu)
+            const isMe = String(p.id) === myIdStr;
+            const isReadyMode = statusMode === "ready";
+
+            // Quiz-läge (answered)
+            const hasAnswered = !!p.answered;
+            const isCorrect = p.correct === true;
+            // const isWrong = p.correct === false;
+
+            // Etiketter
+            const meLabel = isReadyMode
+              ? p.ready
+                ? "Ready!"
+                : "Ready?"
+              : hasAnswered
+                ? isCorrect
+                  ? "Correct!"
+                  : "Wrong!"
+                : "Answer…";
+
+            const otherLabel = isReadyMode
+              ? p.ready
+                ? "Ready"
+                : "Not ready"
+              : hasAnswered
+                ? isCorrect
+                  ? "Correct"
+                  : "Wrong"
+                : "Thinking…";
+
+            // Stilar
+            const styleNeutral = {
+              backgroundColor: "hsl(0, 0%, 95%)",
+              color: "hsl(0, 0%, 30%)",
+              border: "1px solid hsl(0, 0%, 75%)",
+            };
+            const styleCorrect = {
+              backgroundColor: "hsl(140, 60%, 90%)",
+              color: "hsl(140, 30%, 25%)",
+              border: "1px solid hsl(140, 40%, 65%)",
+            };
+            const styleWrong = {
+              backgroundColor: "hsl(0, 70%, 90%)",
+              color: "hsl(0, 50%, 25%)",
+              border: "1px solid hsl(0, 60%, 70%)",
+            };
+
+            const badgeStyle = isReadyMode
+              ? p.ready ? styleCorrect : styleNeutral
+              : !hasAnswered
+                ? styleNeutral
+                : isCorrect
+                  ? styleCorrect
+                  : styleWrong;
+
             return (
               <div
-                key={`slot-${i}`}
-                className="flex items-center justify-start rounded-lg border border-dashed bg-gray-50 px-3 py-2 text-gray-400"
+                key={`${p.id}-${i}`}
+                className="flex items-center justify-between rounded-lg border bg-white px-3 py-2"
+                style={{ backgroundColor: color.bg, color: color.text }}
               >
-                <span className="font-medium">{`Player ${i + 1}`}</span>
+                <div className="flex items-center gap-2 w-full">
+                    {/* Spelarens namn */}
+                  <span className="font-medium truncate">{p.playerName}</span>
+
+                     {/* Host-badge om spelaren är värd */}
+                  {p.isHost && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs"
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.6)",
+                        color: color.text,
+                        border: `1px solid ${color.text}`,
+                      }}
+                    >
+                      Host
+                    </span>
+                  )}
+
+                    {/* You-badge om spelaren är jag */}
+                  {isMe && (
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs"
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.6)",
+                        color: color.text,
+                        border: `1px solid ${color.text}`,
+                      }}
+                    >
+                      You
+                    </span>
+                  )}
+
+                    {/* Ready UI: jag får knapp, andra ser status */}
+                  <div className="ml-auto">
+                    {isReadyMode && isMe ? (
+                      <button
+                        type="button"
+                        onClick={onToggleReady}
+                        aria-pressed={p.ready}
+                        className="rounded-full px-2 py-0.5 text-xs transition-colors"
+                        style={badgeStyle}
+                      >
+                        {meLabel}
+                      </button>
+                    ) : (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-xs"
+                        style={badgeStyle}
+                      >
+                        {isMe ? meLabel : otherLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             );
           })}
