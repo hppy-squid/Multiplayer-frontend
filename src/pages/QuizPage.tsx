@@ -43,6 +43,7 @@ export function QuizPage() {
 
   const handleAnswer = useCallback(
     (opt: string) => {
+      console.log("badabing bada boom");
       if (!round) return;
       const myIdNum = Number(myIdStr);
       if (!myIdNum || Number.isNaN(myIdNum)) return;
