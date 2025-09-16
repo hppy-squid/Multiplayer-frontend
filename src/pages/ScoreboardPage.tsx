@@ -127,14 +127,15 @@ export function ScoreboardPage() {
   };
   
 
+  // Get identity and stompRef at component level (hooks must be top-level)
+  const initialPlayers = location.state?.initialPlayers as ServerPlayer[] | undefined;
+  const { myIdNum, myIdStr: myIdStrLeave } = usePlayerIdentity(location.state);
+  const { stompRef } = useLobbySocket(lobbyCode, myIdStrLeave, initialPlayers);
+
   // Lämna lobbyn
   const handleLeave = async () => {
+    const isWaiting = Boolean(code);
 
-    const isWaiting = Boolean(code); 
-    const initialPlayers = location.state?.initialPlayers as ServerPlayer[] | undefined;
-    const { myIdNum, myIdStr } = usePlayerIdentity(location.state);
-    const {  stompRef } = useLobbySocket(lobbyCode, myIdStr, initialPlayers);
-    
     if (!isWaiting) {
       navigate("/", { replace: true });
       return;

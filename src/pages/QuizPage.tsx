@@ -101,13 +101,13 @@ export function QuizPage() {
               {round ? (
                 <QuizTime phase={round.phase} endsAt={round.endsAt} />
               ) : (
-                <div className="text-sm text-gray-600">Väntar…</div>
+                <div className="text-sm text-gray-600">Waiting…</div>
               )}
             </div>
 
             <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
               <span>
-                Fråga {round ? Math.min(round.index + 1, round.total) : 0}/{round?.total ?? 5}
+                Question {round ? Math.min(round.index + 1, round.total) : 0}/{round?.total ?? 5}
               </span>
               <span>{progressPct}%</span>
             </div>
@@ -133,7 +133,7 @@ export function QuizPage() {
                 // answeredCount={round.answeredCount}
               />
             ) : (
-              <div className="text-center text-gray-600">Väntar på nästa fråga…</div>
+              <div className="text-center text-gray-600">Next question is on its way…</div>
             )}
           </Card>
         </div>
