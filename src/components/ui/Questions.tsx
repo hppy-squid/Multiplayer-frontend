@@ -8,8 +8,6 @@ import { Card } from "./Card";
 import { Button } from "./Button";
 import { Divider } from "./Divider";
 import { getCorrectAnswer, getQuestionAndOptions } from "../../api/QuestionsApi";
-
-import { useEffect, useState } from "react";
 import {useParams} from "react-router-dom";
 
 import type { QuizTimerState } from "./QuizTime";
@@ -177,7 +175,6 @@ function QuestionsLocal({
   const [guessed, setGuessed] = useState(false);
   const [guessedOption, setGuessedOption] = useState<string | null>(null);
 
-  const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
   const { code } = useParams<{ code: string }>();
   const lobbyCode = code?.toUpperCase() || "";
 
@@ -194,20 +191,19 @@ function QuestionsLocal({
   // Rapportera progress
   useEffect(() => {
 
-    // if (lobbyCode) {
-      // Skapar en array med fråge-ID:n 1-50
-      //const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
-      // Beräknar offset baserat på lobbykoden  som är gemensam för alla spelare i samma lobby
-      //const offset = lobbyCode.charCodeAt(0) % 50;
-      // Roterar arrayen baserat på offset
-      //const rotated = [...numbers.slice(offset), ...numbers.slice(0, offset)];
-      //setIds(rotated);
-    //}
+    if (lobbyCode) {
+      //Skapar en array med fråge-ID:n 1-50
+      const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
+      //Beräknar offset baserat på lobbykoden  som är gemensam för alla spelare i samma lobby
+      const offset = lobbyCode.charCodeAt(0) % 50;
+      //Roterar arrayen baserat på offset
+      const rotated = [...numbers.slice(offset), ...numbers.slice(0, offset)];
+      setIds(rotated);
+    }
 
-  //}, [lobbyCode]);
 
     onProgressChange?.(answered, total);
-  }, [answered, total, onProgressChange]);
+  }, [answered, total, onProgressChange, lobbyCode]);
 
 
   // Sätt första id
