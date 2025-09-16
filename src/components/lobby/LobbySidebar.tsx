@@ -146,6 +146,8 @@ export function LobbySidebar({
                     {/* Spelarens namn */}
                   <span className="font-medium truncate">{p.playerName}</span>
 
+{                  <span className="font-medium truncate">{p.score} pts</span>
+}
                      {/* Host-badge om spelaren är värd */}
                   {p.isHost && (
                     <span
