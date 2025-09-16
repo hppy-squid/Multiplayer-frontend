@@ -184,16 +184,18 @@ function QuestionsLocal({
   // Initiera kö + progress
   useEffect(() => {
     const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
+    console.log('Listan av nummer att fetcha, från första useEffect' + numbers);
     setIds(shuffle(numbers).slice(0, Math.max(0, total)));
     setAnswered(0);
   }, [total]);
 
   // Rapportera progress
   useEffect(() => {
-
+    console.log('Rapportera progress useEffect börjar');
     if (lobbyCode) {
       //Skapar en array med fråge-ID:n 1-50
       const numbers = Array.from({ length: 50 }, (_, i) => i + 1);
+      console.log('Listan av nummer att fetcha' + numbers);
       //Beräknar offset baserat på lobbykoden  som är gemensam för alla spelare i samma lobby
       const offset = lobbyCode.charCodeAt(0) % 50;
       //Roterar arrayen baserat på offset
