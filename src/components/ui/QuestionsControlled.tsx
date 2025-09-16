@@ -110,12 +110,12 @@ export function QuestionsControlled({
                             let className = "w-full";
 
                             if (phase === "answer") {
-                                if (opt === correct) className += "bg-green-500 text-white";
-                                else if (picked === opt && opt !== correct) className += "bg-red-500 text-white";
-                                else className += "bg-gray-200";
+                                if (opt === correct) className += " bg-green-500 text-white";
+                                else if (picked === opt && opt !== correct) className += " bg-red-500 text-white";
+                                else className += " bg-gray-200";
                             } else if (phase === "question" && picked === opt) {
                                 // Ovverride disabled-gråning: ! = important
-                                className += "!ring-6 !ring-blue-600 !bg-black-50";
+                                className += " !ring-6 !ring-blue-600 !bg-black-50";
                             }
 
                             return (
