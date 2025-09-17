@@ -61,7 +61,7 @@ export function QuizTime({ phase /* , endsAt */ }: Props) {
     window.quizTimer = { timeLeft, phase, isRed };
   }, [timeLeft, phase, isRed]);
 
-  const label = phase === "question" ? "Svarar..." : "Visar svar";
+  const label = phase === "question" ? "Answering..." : "Showing answer";
 
   return (
     <div className="flex flex-col items-center justify-center">

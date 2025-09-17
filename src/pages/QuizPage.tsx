@@ -83,7 +83,7 @@ export function QuizPage() {
     <div className="min-h-screen flex justify-center p-6 pt-8">
       <div className="flex items-start justify-center gap-6 w-full">
         {/* Vänster: spelare */}
-        <div className="w-80 shrink-0">
+        <div className="w-min-80 w-max-150 shrink-0">
           <LobbySidebar
             lobbyCode={lobbyCode}
             players={players}
