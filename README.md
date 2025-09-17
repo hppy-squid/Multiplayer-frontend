@@ -4,10 +4,10 @@ För att spela spelet: https://clownfish-app-5gol7.ondigitalocean.app/lobby
 
 ## Installationer
 
-Projektet är byggd med **Vite** och använder **React**, **TypeScript** och **TailwindCSS**.
-<br>
-Tillhörande backend av ett RestApi med SpringBoot och WebSocket.
-
+Projektet är byggd med **Vite** och använder:
+- **React** 
+- **TypeScript**
+- **TailwindCSS**
 
 ## Utveckling - För att köra spelet lokalt
 
