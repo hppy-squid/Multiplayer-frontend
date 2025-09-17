@@ -1,20 +1,8 @@
-/**
- * Filens syfte:
- *
- * Denna fil innehåller hooken `useLobbySocket` som hanterar WebSocket-kommunikation för en lobby.
- * - Skapar en STOMP-klient över SockJS mot backend (WS_BASE).
- * - Prenumererar på lobby-topic för att ta emot uppdateringar (spelare + gameState).
- * - Publicerar meddelanden för Ready/Start till servern.
- * - Seedar UI-state med `initialPlayers` (om vi navigerar in med befintlig snapshot).
- *
- * Returnerar:
- * - players: PlayerDTO[] (UI-modell)
- * - gameState: nuvarande spelstatus (WAITING/IN_GAME/etc.)
- * - amHost: boolean (om jag är host)
- * - publishReady: (myIdNum, ready) → skickar min ready-status
- * - publishStart: (myIdNum) → ber servern starta spelet
- * - stompRef: ref till STOMP-klienten (för t.ex. manuell deactivate vid unmount)
- */
+/******************************************************
+ * useLobbySocket
+ * Hook som skapar STOMP/SockJS-klient, prenumererar på
+ * lobby-snapshot och exponerar publish-funktioner.
+ ******************************************************/
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import SockJS from "sockjs-client/dist/sockjs.js";
@@ -27,11 +15,11 @@ type ServerPlayerWire = {
   id: number | string;
   playerName: string;
   isHost?: boolean;
-  host?: boolean;          // fallback om backend skulle heta "host"
+  host?: boolean;          
   ready?: boolean;
   score?: number;
-  answered?: boolean;      // från backend
-  correct?: boolean | null;// från backend (true/false/null)
+  answered?: boolean;      
+  correct?: boolean | null;
 };
 
 /** Serverns RoundDTO enligt LobbySnapshotDTO (backend) */
@@ -40,7 +28,7 @@ type ServerRoundDTO = {
   index: number;
   total: number;
   phase: "question" | "answer";
-  endsAt: number | string;      // epoch millis
+  endsAt: number | string;      
   answeredCount?: number | null;
 };
 

@@ -1,18 +1,11 @@
-/**
- * Filens syfte:
- *
- * Denna fil innehåller `TabList`-komponenten.
- * - Används som container för flera `TabButton`-komponenter.
- * - Lägger tabbarna i en horisontell rad med jämnt mellanrum.
- * - Har rollen `tablist` för bättre tillgänglighet.
- */
+/******************************************************
+ * UI-komponent: TabList
+ * Wrapper som grupperar tabbar i en horisontell rad
+ ******************************************************/
 
 import type { PropsWithChildren } from "react";
 
-/**
- * TabList
- * En wrapper för tabbar som grupperar `TabButton`-komponenter.
- */
+
 export function TabList({ children }: PropsWithChildren) {
   return (
     <div

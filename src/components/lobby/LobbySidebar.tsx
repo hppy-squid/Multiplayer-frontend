@@ -1,20 +1,9 @@
-/**
- * Filens syfte:
- *
- * `LobbySidebar` visar information om en lobby och dess spelare.
- * Den kan:
- * - Visa lobbykod
- * - Lista alla spelare i lobbyn med plats för tomma slots
- * - Markera vem som är Host och vem som är "You" (jag själv)
- * - Visa och hantera "Ready"-status (knapp för mig, status för andra)
- *
- * Props:
- * - lobbyCode: sträng med lobbykod att visa
- * - players: lista med spelare (PlayerDTO) från servern
- * - myIdStr: mitt id som sträng för att känna igen "jag"
- * - maxPlayers: max antal spelare (default 4)
- * - onToggleReady: callback när jag klickar på "Ready"-knappen
- */
+/********************************************************************
+ * LobbySidebar
+ * Visar lobbykod, spelarslots och status (Ready/Answered)
+ * med möjlighet att toggla Ready för “mig”.
+ ********************************************************************/
+
 
 import { Card } from "../ui/Card";
 import { Divider } from "../ui/Divider";
@@ -29,14 +18,14 @@ const PLAYER_COLORS = [
   { bg: "#FDE2E4", text: "#9D174D" },
 ];
 
-// Inparametrar till sidebaren
+
 type Props = {
-  lobbyCode: string;            // lobbykod att visa  
-  players: PlayerDTO[];         // lista med spelare (från servern)
-  myIdStr: string;              // mitt id som sträng (för att känna igen "jag")
-  maxPlayers?: number;          // max antal platser (default 4)
-  onToggleReady?: () => void;    // klick på Ready för mig
-  statusMode?: "ready" | "answered" | "";
+  lobbyCode: string;                  // lobbykod att visa  
+  players: PlayerDTO[];               // lista med spelare (från servern)
+  myIdStr: string;                    // mitt id som sträng (för att känna igen "jag")
+  maxPlayers?: number;                // max antal platser (default 4)
+  onToggleReady?: () => void;         // klick på Ready för mig
+  statusMode?: "ready" | "answered" | ""; // visar "Ready" eller "Answered"
 };
 
 export function LobbySidebar({
@@ -57,6 +46,7 @@ export function LobbySidebar({
       <p className="text-sm text-gray-600 mb-4">
         <span className="font-mono font-semibold">{lobbyCode || "—"}</span>
       </p>
+
       <Divider />
 
       <div className="mt-4">
@@ -143,12 +133,13 @@ export function LobbySidebar({
                 style={{ backgroundColor: color.bg, color: color.text }}
               >
                 <div className="flex items-center gap-2 w-full">
-                    {/* Spelarens namn */}
+                  {/* Spelarens namn */}
                   <span className="font-medium truncate">{p.playerName}</span>
 
-{                  <span className="font-medium truncate">{p.score} pts</span>
-}
-                     {/* Host-badge om spelaren är värd */}
+                  {/* Spelarens score */}
+                  <span className="font-medium truncate">{p.score} pts</span>
+
+                  {/* Host-badge om spelaren är värd */}
                   {p.isHost && (
                     <span
                       className="rounded-full px-2 py-0.5 text-xs"

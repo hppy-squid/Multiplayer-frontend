@@ -1,5 +1,10 @@
-// components/ui/QuizTime.tsx (ERSÄTT filen med detta)
-import { useEffect, /* useMemo, */ useState } from "react";
+/******************************************************
+ * UI-komponent: QuizTime
+ * Räknar ner tid för frågefas/svarsfasklocka i quizet
+ ******************************************************/
+
+
+import { useEffect, useMemo, useState } from "react";
 
 export type Phase = "question" | "answer";
 
@@ -16,8 +21,8 @@ declare global {
 }
 
 type Props = {
-  phase: Phase; // serverns fas
-  endsAt: number; // epoch millis då fasen tar slut
+  phase: Phase;   // serverns fas
+  endsAt: number; // epoch millis då fasen tar slut (från servern)
 };
 
 export function QuizTime({ phase /* , endsAt */ }: Props) {

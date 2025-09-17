@@ -1,20 +1,12 @@
-/**
- * Filens syfte:
- *
- * Denna fil innehåller en enkel layoutkomponent (`Divider`).
- * - Visar en tunn horisontell linje för att separera innehåll.
- * - Ger visuell paus mellan t.ex. knappar eller sektioner.
- * - Tillåter extra `className` för anpassad styling.
- */
+/******************************************************
+ * UI-komponent: Divider
+ * Horisontell linje för att separera innehåll
+ ******************************************************/
 
 type Props = {
   className?: string;
 };
 
-/**
- * Divider
- * En horisontell linje med gradient för att skapa separation i UI:t.
- */
 export function Divider({ className = "" }: Props) {
   return (
     <div

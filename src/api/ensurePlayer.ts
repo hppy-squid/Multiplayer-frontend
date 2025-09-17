@@ -1,22 +1,14 @@
-/**
- * Filens syfte:
- * 
- * Den här filen ansvarar för att skapa eller återanvända en spelare på backend.
- * Flödet fungerar så här:
- * - Om spelaren redan finns sparad i sessionStorage (samma tabb-session), återanvänd den.
- * - Annars skickas en POST-förfrågan till backend för att skapa en ny spelare.
- * - När backend svarar sparas spelarens id och namn i sessionStorage så de kan återanvändas.
- */
+/**************************************************************************
+ * Säkerställer att det alltid finns en spelare koppat till frontend.
+ **************************************************************************/
 
 
 import { API_BASE } from "./config";
 
-// Typdefinition (DTO) för vad backend returnerar när en spelare skapas.
+
 type CreatePlayerResponse = { id: number; playerName: string; score?: number; isHost?: boolean };
 
 /**
- * Säkerställ att vi har en server-skapad spelare.
- *
  * Steg:
  * 1) Kolla om det redan finns en spelare i sessionStorage.
  * 2) Om inte, skapa en ny spelare via backend.
@@ -42,6 +34,7 @@ export async function ensurePlayer(
 
   // Trimma namnet. Om inget namn skickas används "Player" som standard.
   const body = { playerName: (name || "Player").trim() };
+  
   // Debug-logg
   console.log("[ensurePlayer] POST", url, body);
 
@@ -56,13 +49,13 @@ export async function ensurePlayer(
   const text = await res.text();
   console.log("[ensurePlayer] response", res.status, text);
 
-  // Hantera fel från backend (t.ex. 400 eller 500)
+  // Hantera fel från backend
   if (!res.ok) throw new Error(`POST /player/create ${res.status}: ${text || "(no body)"}`);
 
-  // Om svaret var OK, parsa JSON till vår CreatePlayerResponse-typ
+  // Om svaret var OK, parsa JSON
   const dto: CreatePlayerResponse = JSON.parse(text);
 
-  // 3) Spara spelarens id och namn i sessionStorage för att återanvända i samma tabb
+  // Spara spelarens id och namn i sessionStorage för att återanvända
   sessionStorage.setItem("serverPlayerId", String(dto.id));
   sessionStorage.setItem("serverPlayerName", dto.playerName);
   

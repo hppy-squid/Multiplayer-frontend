@@ -1,29 +1,19 @@
-/**
- * Filens syfte:
- *
- * Den här filen innehåller API-anrop för att hantera lobbys (spelsessioner).
- * Den kan:
- * - Skapa en ny lobby
- * - Gå med i en befintlig lobby
- * - Hämta en lobby via ID
- * - Lämna en lobby
- * - Nollställa allas "ready" i en lobby
- *
- * Filen har också hjälpfunktioner för att:
- * - Ge bättre felmeddelanden om anrop misslyckas
- */
+/**********************************************************************
+ * API-anrop för att hantera lobbys (spelsessioner).
+ **********************************************************************/
 
 import { API_BASE, USE_BACKEND } from "./config";
 import type { ServerLobbyDTO } from "../types/types";
 
 // Bas-URL från config (hämtas från .env)
-const BASE = API_BASE;
+// const BASE = API_BASE;
 
 // Flagga som anger om backend är påslagen
-export const isBackendConfigured = USE_BACKEND;
+// export const isBackendConfigured = USE_BACKEND;
 
 // Max antal spelare per lobby
-export const FIXED_MAX_PLAYERS = 4;
+// export const FIXED_MAX_PLAYERS = 4;
+
 
 // Gemensamt felmeddelande om backend inte är igång
 export const BACKEND_NOT_ENABLED_MSG =
@@ -47,14 +37,16 @@ export type JoinLobbyRequest = {
 
 // Säkerställ att backend är igång, annars kasta fel
 async function ensureBackend() {
-  if (!isBackendConfigured) throw new Error(BACKEND_NOT_ENABLED_MSG);
+  if (!USE_BACKEND) throw new Error(BACKEND_NOT_ENABLED_MSG);
 }
 
-// Läser svarstexten för att kunna logga bra felmeddelanden vid 4xx/5xx.
+/**
+ * Läser svaret som text, kastar informativt fel vid 4xx/5xx,
+ * och returnerar parsad JSON vid OK-svar.
+ */
 async function parseJsonOrThrow(res: Response, context: string) {
   const text = await res.text();
   if (!res.ok) {
-    // Om det blev fel skickar vi med body så UI kan visa detaljer
     throw new Error(`${context} ${res.status}: ${text || "(no body)"}`);
   }
   try {
@@ -67,31 +59,29 @@ async function parseJsonOrThrow(res: Response, context: string) {
 // ------- API-anrop -------
 
 /**
- * Skapar en ny lobby.
- * Backend: POST /api/lobby/create/{playerId}
- * Returnerar en ServerLobbyDTO (hela lobbyn).
+ * Skapar en ny lobby på servern för en spelare.
+ * Returnerar hela Lobby-objektet.
  */
 export async function createLobby(
   { playerId }: CreateLobbyRequest
 ): Promise<ServerLobbyDTO> {
   await ensureBackend();
 
-  const url = `${BASE}/lobby/create/${encodeURIComponent(String(playerId))}`;
+  const url = `${API_BASE}/lobby/create/${encodeURIComponent(String(playerId))}`;
   const res = await fetch(url, { method: "POST" });
   return (await parseJsonOrThrow(res, "POST /lobby/create")) as ServerLobbyDTO;
 }
 
 /**
- * Går med i en befintlig lobby.
- * Backend: POST /api/lobby/join/{lobbyCode}/{playerId}
- * Returnerar en ServerLobbyDTO (hela lobbyn).
+ * Joinar en befintlig lobby.
+ * Returnerar hela Lobby-objektet.
  */
 export async function joinLobby(
   { lobbyCode, playerId }: JoinLobbyRequest
 ): Promise<ServerLobbyDTO> {
   await ensureBackend();
 
-  const url = `${BASE}/lobby/join/${encodeURIComponent(lobbyCode)}/${encodeURIComponent(String(playerId))}`;
+  const url = `${API_BASE}/lobby/join/${encodeURIComponent(lobbyCode)}/${encodeURIComponent(String(playerId))}`;
   const res = await fetch(url, { method: "POST" });
   return (await parseJsonOrThrow(res, "POST /lobby/join")) as ServerLobbyDTO;
 }
@@ -105,18 +95,17 @@ export async function getLobbyById(
 ): Promise<ServerLobbyDTO> {
   await ensureBackend();
 
-  const url = `${BASE}/lobby/find/${encodeURIComponent(String(lobbyId))}`;
+  const url = `${API_BASE}/lobby/find/${encodeURIComponent(String(lobbyId))}`;
   const res = await fetch(url);
   return (await parseJsonOrThrow(res, "GET /lobby/find")) as ServerLobbyDTO;
 }
 
 /**
- * Lämnar en lobby.
- * Backend: POST /api/lobby/leave/{lobbyCode}/{playerId}
- * Returnerar antingen den uppdaterade lobbyn eller id=null om lobbyn blev tom.
+ * Låter spelare lämna en lobby.
+ * Returnerar den uppdaterade lobbyn, eller id=null om lobbyn blev tom.
  */
 export async function leaveLobby(params: { lobbyCode: string; playerId: number }) {
-  const res = await fetch(`${BASE}/lobby/leave/${params.lobbyCode}/${params.playerId}`, {
+  const res = await fetch(`${API_BASE}/lobby/leave/${params.lobbyCode}/${params.playerId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
@@ -134,11 +123,11 @@ export async function leaveLobby(params: { lobbyCode: string; playerId: number }
 
 /**
  * Nollställer allas "ready" i lobbyn (server-side).
- * Används t.ex. när man trycker "Play Again" på scoreboarden.
+ * Används t.ex. vid "Play Again".
  *
  */
 export async function resetLobbyReady(lobbyCode: string): Promise<void> {
-  const res = await fetch(`${BASE}/lobby/${encodeURIComponent(lobbyCode)}/ready/reset`, {
+  const res = await fetch(`${API_BASE}/lobby/${encodeURIComponent(lobbyCode)}/ready/reset`, {
     method: "POST",
     headers: { Accept: "application/json" }
   });
