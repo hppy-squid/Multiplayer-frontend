@@ -22,7 +22,7 @@ npm install
 ### Uppdatera variabler i .env-fil
 ```
 VITE_API_BASE="http://localhost:8080/api"
-VITE_WS_BASE="http://localhost:8080/api"
+VITE_WS_BASE="http://localhost:8080/ws"
 ```
 
 ### Följ länken för att hämta backend och starta lokalt
