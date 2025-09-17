@@ -114,6 +114,10 @@ export function ScoreboardPage() {
     
     try {
       await resetLobbyReady(lobbyCode);
+      sessionStorage.removeItem("serverPlayerId");
+      sessionStorage.removeItem("serverPlayerName");
+      sessionStorage.removeItem("playerId");
+      sessionStorage.removeItem("playerName");
     } catch (e) {
       alert("Play Again misslyckades: " + (e instanceof Error ? e.message : String(e)));
       return;
@@ -159,7 +163,7 @@ export function ScoreboardPage() {
     <div className="min-h-screen flex justify-center p-6 pt-8">
       <div className="flex items-start justify-center gap-6 w-full">
         {/* Vänster: spelare */}
-        <div className="w-80 shrink-0">
+        <div className="w-min-80 w-max-150 shrink-0">
           <LobbySidebar
             lobbyCode={lobbyCode}
             players={playersForUI}

@@ -13,7 +13,7 @@
 
 // Bas-URL för WebSocket (från .env eller fallback till localhost)
 export const WS_BASE =
-  import.meta.env.VITE_WS_BASE || "https://seal-app-9djqw.ondigitalocean.app/ws";
+  import.meta.env.VITE_WS_BASE;
 
 // Endpoints för att SKICKA meddelanden till servern
 export const APP = {

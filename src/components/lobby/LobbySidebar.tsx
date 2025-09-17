@@ -35,8 +35,8 @@ type Props = {
   players: PlayerDTO[];         // lista med spelare (från servern)
   myIdStr: string;              // mitt id som sträng (för att känna igen "jag")
   maxPlayers?: number;          // max antal platser (default 4)
-  onToggleReady: () => void;    // klick på Ready för mig 
-  statusMode?: "ready" | "answered";
+  onToggleReady?: () => void;    // klick på Ready för mig
+  statusMode?: "ready" | "answered" | "";
 };
 
 export function LobbySidebar({

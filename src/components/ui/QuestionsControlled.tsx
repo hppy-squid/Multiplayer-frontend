@@ -135,14 +135,6 @@ export function QuestionsControlled({
                     
 
                     <Divider className="my-6" />
-                    <div className="text-center text-sm text-gray-600">
-                        {phase === "question" ? "Väntar på svar från alla…" : "Visar facit…"}
-                    </div>
-                    {phase === "question" && picked && (
-                        <div className="mt-3 text-center text-sm">
-                            Your answer: <strong>{picked}</strong>
-                        </div>
-                    )}
                 </>
             )}
 
