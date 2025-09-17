@@ -8,65 +8,29 @@ import { useEffect, useMemo, useState } from "react";
 
 export type Phase = "question" | "answer";
 
-export type QuizTimerState = {
-  timeLeft: number; // sekunder kvar (avrundat uppåt)
-  phase: Phase; // "question" | "answer"
-  isRed: boolean; // visuellt cue
-};
-
-declare global {
-  interface Window {
-    quizTimer?: QuizTimerState;
-  }
-}
-
 type Props = {
   phase: Phase;   // serverns fas
   endsAt: number; // epoch millis då fasen tar slut (från servern)
 };
 
-export function QuizTime({ phase /* , endsAt */ }: Props) {
-  // räkna ner utifrån serverns endsAt
-  /*   const [now, setNow] = useState(() => Date.now());
-   */
-  /* useEffect(() => {
+export function QuizTime({ phase, endsAt }: Props) {
+  // Håll lokal "nu"-klocka som tickar
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    // Ticker som uppdaterar "nu" 4 ggr/sek för smidig nedräkning
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
-  }, []); */
+  }, []);
 
-  const [timeLeft, setTimeLeft] = useState(() => (phase === "question" ? 15 : 5));
-
-  // Räknar ner varje sekund och rerunnar beronede vid fasändringar 
-  useEffect(() => {
-    // Sätter tid beroende på fas, om question 15 sekunder om inte (alltså när det är answer) så sätter vi till 5 sekunder 
-    setTimeLeft(phase === "question" ? 15 : 5);
-
-    const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000); 
-
-    return () => clearInterval(interval); 
-  }, [phase]); 
-
-  /* const timeLeft = useMemo(() => {
+  // Beräkna sekunder kvar, avrunda uppåt (3.2s -> 4s)
+  const timeLeft = useMemo(() => {
     const ms = Math.max(0, endsAt - now);
-    return Math.ceil(ms / 1000); // 3.2s → 4s
-  }, [endsAt, now]); */
+    return Math.ceil(ms / 1000);
+  }, [endsAt, now]);
 
   const isRed = phase === "question" && timeLeft <= 3;
-
-  // Exponera till window för andra komponenter (om ni använder det)
-  useEffect(() => {
-    window.quizTimer = { timeLeft, phase, isRed };
-  }, [timeLeft, phase, isRed]);
-
-  const label = phase === "question" ? "Answering..." : "Showing answer";
+  const label = phase === "question" ? "Answer now…" : "Showing answer";
 
   return (
     <div className="flex flex-col items-center justify-center">
