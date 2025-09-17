@@ -1,117 +1,33 @@
+Online multiplayer Quiz-spel med lobbyfunktion. Varje lobby måste innheålla 4 spelare för att kunna starta spelet. 
+
+För att spela spelet: https://clownfish-app-5gol7.ondigitalocean.app/lobby 
+
 ## Installationer
 
-Projektet använder **React**, **TypeScript**, **TailwindCSS** och **Material UI Icons**.
+Projektet är byggd med **Vite** och använder **React**, **TypeScript** och **TailwindCSS**.
+<br>
+Tillhörande backend av ett RestApi med SpringBoot och WebSocket.
 
-### Styling
+
+## Utveckling - För att köra spelet lokalt
+
+### Klona ner projektet 
 ```
-npm install -D tailwindcss postcss autoprefixer
-npx tailwindcss init -p
+ frontend - git clone https://github.com/hppy-squid/Multiplayer-frontend
 ```
-
-### UI-komponenter och ikoner
-
-```
-npm install @mui/icons-material @mui/material @emotion/styled @emotion/react
-```
-
-### Routing
-
-```
-npm install react-router-dom
-npm install -D @types/react-router-dom
-```
-
-### Web socket
-
-```
-npm install sockjs-client stompjs
-npm i @stomp/stompjs sockjs-client
-npm i -D @types/sockjs-client
-```
-
-
-## Utveckling
-
 ### Starta utvecklingsservern (Vite)
 ```
-npm run dev
+npm install
+```
+### Uppdatera variabler i .env-fil
+```
+VITE_API_BASE="http://localhost:8080/api"
+VITE_WS_BASE="http://localhost:8080/api"
 ```
 
-### Bygg för produktion
-```
-npm run build
-```
+### Följ länken för att hämta backend och starta lokalt
+
+ backend - https://github.com/hppy-squid/Multiplayer-backend
 
 
-
-
-
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+ 
