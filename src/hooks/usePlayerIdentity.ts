@@ -1,19 +1,9 @@
-/**
- * Filens syfte:
- *
- * Denna fil innehåller hooken `usePlayerIdentity`.
- * - Hämtar spelarens identitet (id + namn) från navigationens state eller från storage.
- * - Prioriterar ordning: state → sessionStorage → localStorage.
- * - Säkerställer att id är ett nummer och namn inte är tomt (fallback: "Player").
- * - Persisterar värden i sessionStorage när de kommer från navigation.
- *
- * Returnerar:
- * - myIdNum: spelarens id som number (eller undefined)
- * - myIdStr: spelarens id som string (eller tom sträng om saknas)
- * - myName: spelarens namn (default "Player")
- * 
- * usePlayerIdentity är nödvändig för att hålla reda på vem spelaren är i appen, oavsett navigation eller sidladdning.
- */
+/******************************************************
+ * Hook: usePlayerIdentity
+ * Håller reda på spelarens identitet (id + namn)
+ ******************************************************/
+
+
 
 import { useEffect} from "react";
 import type { LobbyLocationState } from "../types/types";

@@ -1,16 +1,9 @@
-/**
- * Filens syfte:
- *
- * Denna sida hanterar:
- * 1) Väntsida för en specifik lobby (/lobby/:code)
- * 2) Start/Join-vy när man ännu inte är i en lobby (/lobby)
- *
- * Den:
- * - Läser och persisterar spelaridentitet (playerId, playerName) från router state / storage.
- * - Upprättar WebSocket via hooken `useLobbySocket` och visar spelare i `LobbySidebar`.
- * - Navigerar automatiskt till spelet när servern signalerar IN_GAME via `useGameStartNavigation`.
- * - Har actions för att skapa/join:a/lämna lobby samt toggla ready och starta spelet (host).
- */
+/******************************************************
+ * LobbyPage
+ * Sida som visar antingen:
+ * - Väntvy för en specifik lobby (/lobby/:code), eller
+ * - Start/Join-vy när ingen lobby är vald (/lobby)
+ ******************************************************/
 
 import { useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
@@ -39,7 +32,7 @@ export default function LobbyPage() {
   const isWaiting = Boolean(code);
   const lobbyCode = useMemo(() => (code ?? "").toUpperCase(), [code]);
 
-  // Hämtar spelarens identitet (id + namn) från router-state eller storage.
+  // Hämtar spelarens identitet (id + namn) 
   const { myIdNum, myIdStr, myName } = usePlayerIdentity(location.state);
 
   // ===== WebSocket via hook (inkl. initial snapshot) =====
@@ -171,6 +164,7 @@ export default function LobbyPage() {
     return (
       <div className="min-h-screen flex justify-center p-6 pt-8">
         <div className="flex items-start justify-center gap-6 w-full">
+          
           {/* Vänster: spelare i lobbyn */}
           <div className="w-min-80 w-max-150 shrink-0">
             <LobbySidebar

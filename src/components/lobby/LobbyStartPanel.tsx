@@ -1,16 +1,8 @@
-/**
+/*********************************************************************
  * LobbyStartPanel
- *
- * Denna komponent används för att visa startskärmen när en spelare ska:
- * - gå med i en lobby (via lobbykod)
- * - skapa en ny lobby
- *
- * Funktionalitet:
- * - Växlar mellan "Join" och "Create" via tabs.
- * - Hanterar inputfält för namn (alltid) och lobbykod (endast join).
- * - Har knappar för att anropa join- eller create-funktioner.
- * - Tar in props från föräldern (LobbyPage) som bestämmer logik för anrop.
- */
+ * Startvy där spelaren kan skapa en lobby eller gå med
+ * i en befintlig lobby via kod.
+ ******************************************************************/
 
 
 import { TabList } from "../ui/TabList";
@@ -61,7 +53,7 @@ export function LobbyStartPanel({
       </TabList>
 
       <div>
-        {/* Inputfält för spelarens namn (alltid synligt) */}
+        {/* Inputfält för spelarens namn */}
         <div className="mb-2">
           <TextField
             id="name"

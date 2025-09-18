@@ -1,17 +1,11 @@
-/**
- * Filens syfte:
- * 
- * Den här filen ansvarar för att hämta quizfrågor och svarsalternativ från backend.
- * Den kan:
- * - Hämta en fråga med tillhörande svarsalternativ
- * - Hämta rätt svar till en fråga
- * - Validera att datat från backend har korrekt format
- */
+/**********************************************************************
+ * Hämtar quizfrågor och svarsalternativ från backend
+ **********************************************************************/
 
 import { API_BASE } from "./config";
 
 // Bas-URL för alla fråge-relaterade API-anrop
-const BASE = `${API_BASE}/question`;
+// const BASE = `${API_BASE}/question`;
 
 // Typ för ett svarsalternativ från API:t
 export interface ApiQuestionOption {
@@ -30,9 +24,9 @@ export interface CorrectAnswerVM {
   option_text: string;
 }
 
+/* Hjälpfunktioner */
 
-// Hjälpfunktion: kollar om värdet är ett objekt (ej null)
-
+// Validera att värdet är ett objekt (ej null)
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
@@ -56,7 +50,7 @@ function isApiCorrectAnswerRaw(v: unknown): v is ApiCorrectAnswerRaw {
  * Förväntar en array av { question, option_text }.
  */
 export async function getQuestionAndOptions(questionId: number): Promise<ApiQuestionOption[]> {
-  const res = await fetch(`${BASE}/questionAndOptions?question_id=${questionId}`);
+  const res = await fetch(`${API_BASE}/question/questionAndOptions?question_id=${questionId}`);
   if (!res.ok) throw new Error(`questionAndOptions HTTP ${res.status}`);
 
   const json: unknown = await res.json();
@@ -70,8 +64,7 @@ export async function getQuestionAndOptions(questionId: number): Promise<ApiQues
 // Hämta rätt svar för ett id, och validera svaret
 export async function getCorrectAnswer(questionId: number): Promise<CorrectAnswerVM> {
 
-  
-  const res = await fetch(`${BASE}/correctAnswer?question_id=${questionId}`);
+  const res = await fetch(`${API_BASE}/question/correctAnswer?question_id=${questionId}`);
   if (!res.ok) throw new Error(`correctAnswer HTTP ${res.status}`);
 
   const json: unknown = await res.json();

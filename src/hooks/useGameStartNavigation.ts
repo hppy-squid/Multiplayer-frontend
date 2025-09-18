@@ -1,12 +1,7 @@
-/**
- * Filens syfte:
- *
- * Denna fil innehåller hooken `useGameStartNavigation`.
- * - Lyssnar på `gameState` i lobbyn.
- * - När spelet går över till `IN_GAME` navigerar hooken automatiskt till spelsidan.
- * - Ser till att navigeringen bara sker en gång (via `hasNavigatedRef`).
- * - Skickar med nödvändig state (spelare, id, namn, host) till spelsidan.
- */
+/******************************************************
+ * Hook: useGameStartNavigation
+ * Navigerar från lobby → game när servern signalerar IN_GAME
+ ******************************************************/
 
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
